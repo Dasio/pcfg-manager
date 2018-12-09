@@ -32,10 +32,10 @@ func (p *Pcfg) StartIndex() int {
 	return -1
 }
 
-func (p *Pcfg) ListTerminals(preTerminal *TreeItem) (int, string, string) {
+func (p *Pcfg) ListTerminals(preTerminal *TreeItem) (uint64, string, string) {
 	guessGeneration := NewGuessGeneration(p.grammar, preTerminal)
 	guess := guessGeneration.First()
-	guesses := 0
+	guesses := uint64(0)
 	first := guess
 	last := guess
 	buf := bufio.NewWriter(os.Stdout)

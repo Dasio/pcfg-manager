@@ -1,7 +1,8 @@
 package manager
 
 type Manager struct {
-	ruleName string
+	generator *Generator
+	ruleName  string
 }
 
 func NewManager(ruleName string) *Manager {
@@ -16,11 +17,13 @@ func (m *Manager) Load() error {
 		return err
 	}
 	pcfg := NewPcfg(grammar)
-	generator := NewGenerator(pcfg)
-	generator.Run()
+	m.generator = NewGenerator(pcfg)
 	return nil
 }
 
-func (m *Manager) Start() error {
+func (m *Manager) Start(goRoutines uint, maxGuesess uint64) error {
+	if err := m.generator.Run(goRoutines, maxGuesess); err != nil {
+		return err
+	}
 	return nil
 }

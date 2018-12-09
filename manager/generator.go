@@ -1,8 +1,15 @@
 package manager
 
+import (
+	"sync"
+	"sync/atomic"
+)
+
 type Generator struct {
-	pcfg *Pcfg
-	pQue *PcfqQueue
+	pcfg       *Pcfg
+	pQue       *PcfqQueue
+	goRoutines int
+	generated  uint64
 }
 
 func NewGenerator(pcfg *Pcfg) *Generator {
@@ -18,27 +25,42 @@ func NewGenerator(pcfg *Pcfg) *Generator {
 
 func (g *Generator) worker(jobs <-chan *TreeItem) {
 	for j := range jobs {
-		g.pcfg.ListTerminals(j)
+		guesses, _, _ := g.pcfg.ListTerminals(j)
+		atomic.AddUint64(&g.generated, guesses)
 	}
 }
 
-func (g *Generator) Run() {
+func (g *Generator) Run(goRoutines uint, maxGuesses uint64) error {
+	if goRoutines <= 0 {
+		goRoutines = 1
+	}
 	var err error
 	var item *QueueItem
-	jobs := make(chan *TreeItem, 1000)
-	for w := 1; w <= 16; w++ {
-		go g.worker(jobs)
+	jobs := make(chan *TreeItem, goRoutines*64)
+	wg := sync.WaitGroup{}
+	wg.Add(int(goRoutines))
+	for w := uint(1); w <= goRoutines; w++ {
+		go func() {
+			g.worker(jobs)
+			wg.Done()
+		}()
 	}
+
 	for err != ErrPriorirtyQueEmpty {
+		if maxGuesses > 0 && g.generated >= maxGuesses {
+			break
+		}
 		item, err = g.pQue.Next()
 		if err != nil {
 			if err == ErrPriorirtyQueEmpty {
 				break
 			}
-			panic(err)
+			close(jobs)
+			return err
 		}
 		jobs <- item.Tree
-		//g.pcfg.ListTerminals(item.Tree)
 	}
-
+	close(jobs)
+	wg.Wait()
+	return nil
 }
