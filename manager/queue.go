@@ -113,19 +113,6 @@ func (q *PcfqQueue) AddChildrenToQueue(item *QueueItem) {
 			Probability: q.pcfg.FindProbability(child),
 			Tree:        child,
 		}
-		/*if childNode.Tree.Index == 55 && childNode.Tree.Transition == 142 && len(childNode.Tree.Childrens) == 3 {
-			if childNode.Tree.Childrens[0].Index == 18 && childNode.Tree.Childrens[0].Transition == 3 && len(childNode.Tree.Childrens[0].Childrens) == 1 &&
-				childNode.Tree.Childrens[1].Index == 45 && childNode.Tree.Childrens[1].Transition == 2 && len(childNode.Tree.Childrens[1].Childrens) == 0  && //childNode.Tree.Childrens[1].Id &&
-				childNode.Tree.Childrens[2].Index == 18 && childNode.Tree.Childrens[2].Transition == 3 && len(childNode.Tree.Childrens[2].Childrens) == 1 {
-				fmt.Fprintln(os.Stderr, "---------", len(childrenList))
-				fmt.Fprintln(os.Stderr, item.Tree)
-				//fmt.Fprintln(os.Stderr, *childNode.Tree, childNode.Probability)
-				PrintChildren(item.Tree.Childrens, 0)
-				fmt.Fprintln(os.Stderr, "---------")
-
-			}
-
-		}*/
 
 		if childNode.Probability <= item.Probability {
 			// @TODO backup storag

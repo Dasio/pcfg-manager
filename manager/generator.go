@@ -25,6 +25,10 @@ func (g *Generator) worker(jobs <-chan *TreeItem) {
 func (g *Generator) Run() {
 	var err error
 	var item *QueueItem
+	jobs := make(chan *TreeItem, 1000)
+	for w := 1; w <= 16; w++ {
+		go g.worker(jobs)
+	}
 	for err != ErrPriorirtyQueEmpty {
 		item, err = g.pQue.Next()
 		if err != nil {
@@ -33,8 +37,8 @@ func (g *Generator) Run() {
 			}
 			panic(err)
 		}
-
-		g.pcfg.ListTerminals(item.Tree)
+		jobs <- item.Tree
+		//g.pcfg.ListTerminals(item.Tree)
 	}
 
 }
