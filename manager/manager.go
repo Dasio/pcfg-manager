@@ -1,5 +1,7 @@
 package manager
 
+import log "github.com/sirupsen/logrus"
+
 type Manager struct {
 	generator *Generator
 	ruleName  string
@@ -21,8 +23,13 @@ func (m *Manager) Load() error {
 	return nil
 }
 
-func (m *Manager) Start(goRoutines uint, maxGuesess uint64) error {
-	if err := m.generator.Run(goRoutines, maxGuesess); err != nil {
+func (m *Manager) Start(input *InputArgs) error {
+	log.Infoln("Rule: ", m.ruleName)
+	log.Infoln("GoRoutines: ", input.GoRoutines)
+	log.Infoln("MaxGuesses: ", input.MaxGuesses)
+	log.Infoln("Debug: ", input.Debug)
+
+	if err := m.generator.Run(input); err != nil {
 		return err
 	}
 	return nil

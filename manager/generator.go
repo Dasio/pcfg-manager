@@ -10,6 +10,7 @@ type Generator struct {
 	pQue       *PcfqQueue
 	goRoutines int
 	generated  uint64
+	args       *InputArgs
 }
 
 func NewGenerator(pcfg *Pcfg) *Generator {
@@ -28,18 +29,29 @@ func (g *Generator) worker(jobs <-chan *TreeItem) {
 		guesses, _, _ := g.pcfg.ListTerminals(j)
 		atomic.AddUint64(&g.generated, guesses)
 	}
+
 }
 
-func (g *Generator) Run(goRoutines uint, maxGuesses uint64) error {
-	if goRoutines <= 0 {
-		goRoutines = 1
-	}
+func (g *Generator) debugger() {
+
+}
+func (g *Generator) Run(args *InputArgs) error {
+	g.args = args
+
 	var err error
 	var item *QueueItem
-	jobs := make(chan *TreeItem, goRoutines*64)
+	jobs := make(chan *TreeItem, args.GoRoutines*32)
 	wg := sync.WaitGroup{}
-	wg.Add(int(goRoutines))
-	for w := uint(1); w <= goRoutines; w++ {
+	wg.Add(int(args.GoRoutines))
+
+	if args.Debug {
+		wg.Add(1)
+		go func() {
+			g.debugger()
+			wg.Done()
+		}()
+	}
+	for w := uint(1); w <= args.GoRoutines; w++ {
 		go func() {
 			g.worker(jobs)
 			wg.Done()
@@ -47,7 +59,7 @@ func (g *Generator) Run(goRoutines uint, maxGuesses uint64) error {
 	}
 
 	for err != ErrPriorirtyQueEmpty {
-		if maxGuesses > 0 && g.generated >= maxGuesses {
+		if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
 			break
 		}
 		item, err = g.pQue.Next()
@@ -62,5 +74,6 @@ func (g *Generator) Run(goRoutines uint, maxGuesses uint64) error {
 	}
 	close(jobs)
 	wg.Wait()
+
 	return nil
 }

@@ -6,10 +6,10 @@ import (
 )
 
 var (
-	ruleName   string
-	goRoutines uint
-	maxGuesses uint64
+	ruleName  string
+	inputArgs manager.InputArgs
 )
+
 var rootCmd = &cobra.Command{
 	Use:   "pcfg-manager",
 	Short: "Password generator",
@@ -19,7 +19,7 @@ var rootCmd = &cobra.Command{
 		if err := mng.Load(); err != nil {
 			return err
 		}
-		if err := mng.Start(goRoutines, maxGuesses); err != nil {
+		if err := mng.Start(&inputArgs); err != nil {
 			return err
 		}
 		return nil
@@ -36,9 +36,9 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVarP(&ruleName, "rule-name", "r", "Default", "specifies rule")
-	rootCmd.PersistentFlags().UintVarP(&goRoutines, "go-routines", "g", 1, "how many go routines will be used")
-	rootCmd.PersistentFlags().Uint64VarP(&maxGuesses, "max-guesses", "m", 0, "max guesses before exit")
-
+	rootCmd.PersistentFlags().UintVarP(&inputArgs.GoRoutines, "go-routines", "g", 1, "how many go routines will be used")
+	rootCmd.PersistentFlags().Uint64VarP(&inputArgs.MaxGuesses, "max-guesses", "m", 0, "max guesses before exit")
+	rootCmd.PersistentFlags().BoolVarP(&inputArgs.Debug, "debug", "d", false, "")
 }
 
 func initConfig() {
