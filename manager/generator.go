@@ -40,7 +40,7 @@ func (g *Generator) Run(args *InputArgs) error {
 
 	var err error
 	var item *QueueItem
-	jobs := make(chan *TreeItem, args.GoRoutines*32)
+	/*jobs := make(chan *TreeItem, args.GoRoutines*32)
 	wg := sync.WaitGroup{}
 	wg.Add(int(args.GoRoutines))
 
@@ -56,7 +56,7 @@ func (g *Generator) Run(args *InputArgs) error {
 			g.worker(jobs)
 			wg.Done()
 		}()
-	}
+	}*/
 
 	for err != ErrPriorirtyQueEmpty {
 		if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
@@ -67,13 +67,14 @@ func (g *Generator) Run(args *InputArgs) error {
 			if err == ErrPriorirtyQueEmpty {
 				break
 			}
-			close(jobs)
+			//close(jobs)
 			return err
 		}
-		jobs <- item.Tree
+		g.pcfg.ListTerminals(item.Tree)
+		//jobs <- item.Tree
 	}
-	close(jobs)
-	wg.Wait()
+	/*close(jobs)
+	wg.Wait()*/
 
 	return nil
 }
