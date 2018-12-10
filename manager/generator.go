@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"sync"
 	"sync/atomic"
 )
 
@@ -70,7 +69,8 @@ func (g *Generator) Run(args *InputArgs) error {
 			//close(jobs)
 			return err
 		}
-		g.pcfg.ListTerminals(item.Tree)
+		guesses, _, _ := g.pcfg.ListTerminals(item.Tree)
+		g.generated += guesses
 		//jobs <- item.Tree
 	}
 	/*close(jobs)
