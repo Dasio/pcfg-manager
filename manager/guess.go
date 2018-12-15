@@ -55,12 +55,14 @@ func (g *GuessIndex) _resetCapitalization(guess []string, new bool) ([]string, b
 	var tmpString strings.Builder
 	baseWord := guess[g.guessPointer]
 	tmpString.Grow(len(baseWord))
-	for lPos := range baseWord {
+	lPos := 0
+	for _, ch := range baseWord {
 		if rule[lPos] == 'U' {
-			tmpString.WriteRune(unicode.ToUpper(rune(baseWord[lPos])))
+			tmpString.WriteRune(unicode.ToUpper(ch))
 		} else {
-			tmpString.WriteRune(unicode.ToLower(rune(baseWord[lPos])))
+			tmpString.WriteRune(ch)
 		}
+		lPos++
 	}
 	guess[g.guessPointer] = tmpString.String()
 	return guess, true
@@ -88,12 +90,14 @@ func (g *GuessIndex) _nextCapitalization(guess []string, new bool) ([]string, bo
 	baseWord := guess[g.guessPointer]
 	tmpString.Grow(len(baseWord))
 
-	for lPos := range baseWord {
+	lPos := 0
+	for _, ch := range baseWord {
 		if rule[lPos] == 'U' {
-			tmpString.WriteRune(unicode.ToUpper(rune(baseWord[lPos])))
+			tmpString.WriteRune(unicode.ToUpper(ch))
 		} else {
-			tmpString.WriteRune(unicode.ToLower(rune(baseWord[lPos])))
+			tmpString.WriteRune(ch)
 		}
+		lPos++
 	}
 	guess[g.guessPointer] = tmpString.String()
 	return guess, true
