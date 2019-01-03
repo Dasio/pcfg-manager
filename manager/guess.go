@@ -134,6 +134,17 @@ func (g *GuessGeneration) Init(section *TreeItem, endOfGuess int) {
 	}
 }
 
+func (g *GuessGeneration) Count() int {
+	if len(g.structures) == 0 {
+		return 0
+	}
+	r := 1
+	for _, s := range g.structures {
+		r *= len(s.replacement.Values)
+	}
+	return r
+
+}
 func (g *GuessGeneration) First() string {
 	for _, item := range g.structures {
 		guess, ok := item.Reset(g.guess, true)
