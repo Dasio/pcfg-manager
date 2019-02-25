@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"sync"
 	"sync/atomic"
 )
 
@@ -39,7 +40,7 @@ func (g *Generator) Run(args *InputArgs) error {
 
 	var err error
 	var item *QueueItem
-	/*jobs := make(chan *TreeItem, args.GoRoutines*32)
+	jobs := make(chan *TreeItem, args.GoRoutines)
 	wg := sync.WaitGroup{}
 	wg.Add(int(args.GoRoutines))
 
@@ -55,7 +56,7 @@ func (g *Generator) Run(args *InputArgs) error {
 			g.worker(jobs)
 			wg.Done()
 		}()
-	}*/
+	}
 
 	for err != ErrPriorirtyQueEmpty {
 		if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
@@ -66,15 +67,15 @@ func (g *Generator) Run(args *InputArgs) error {
 			if err == ErrPriorirtyQueEmpty {
 				break
 			}
-			//close(jobs)
+			close(jobs)
 			return err
 		}
-		guesses, _, _ := g.pcfg.ListTerminals(item.Tree)
-		g.generated += guesses
-		//jobs <- item.Tree
+		//guesses, _, _ := g.pcfg.ListTerminals(item.Tree)
+		//g.generated += guesses
+		jobs <- item.Tree
 	}
-	/*close(jobs)
-	wg.Wait()*/
+	close(jobs)
+	wg.Wait()
 
 	return nil
 }
