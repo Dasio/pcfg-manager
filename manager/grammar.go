@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/ini.v1"
+	"math/big"
 	"os"
 	"regexp"
 	"strconv"
@@ -79,6 +80,43 @@ func (g *Grammar) Parse() error {
 	return nil
 }
 
+func (g *Grammar) Count() *big.Int {
+	nonTerminalsCount := make(map[string]int64)
+	capitalizationCount := make(map[string]int64)
+	var startSection *Section
+	for _, s := range g.Sections {
+		if strings.HasPrefix(s.Type, "CAPITALIZATION") {
+			key := strings.TrimPrefix(s.Type, "CAPITALIZATION") + s.Name
+			capitalizationCount[key] += int64(len(s.Replacements))
+		} else if strings.HasPrefix(s.Type, "BASE_") {
+			key := strings.TrimPrefix(s.Type, "BASE_")
+			if s.Name != "markov_prob" {
+				key += s.Name
+			}
+			for _, r := range s.Replacements {
+				nonTerminalsCount[key] += int64(len(r.Values))
+			}
+		} else if s.Type == "START" {
+			startSection = s
+		}
+	}
+	result := big.NewInt(0)
+	for _, r := range startSection.Replacements {
+		count := big.NewInt(1)
+		nonTerminals := splitBaseToNonTerminals(r.Values[0])
+		for _, nonTerminal := range nonTerminals {
+			if nonTerminal[0] != 'M' {
+				val, ok := capitalizationCount[nonTerminal[1:]]
+				if ok {
+					count.Mul(count, big.NewInt(val))
+				}
+			}
+			count.Mul(count, big.NewInt(nonTerminalsCount[nonTerminal]))
+		}
+		result.Add(result, count)
+	}
+	return result
+}
 func (g *Grammar) Build(section string) error {
 	for _, s := range g.sectionList {
 		if s == section {
@@ -135,6 +173,21 @@ func (g *Grammar) ParseBaseStructure(base string) ([]int, error) {
 		}
 		return []int{val}, nil
 	}
+
+	elems := splitBaseToNonTerminals(base)
+	for _, e := range elems {
+		value := e[:1]
+		size := e[1:]
+		val, err := g.GetGrammarPos(value, size)
+		if err != nil {
+			return pos, err
+		}
+		pos = append(pos, val)
+	}
+	return pos, nil
+}
+
+func splitBaseToNonTerminals(base string) []string {
 	// base => elems
 	// A111B22C1 => [A111, B22, C1]
 	var elems []string
@@ -146,16 +199,7 @@ func (g *Grammar) ParseBaseStructure(base string) ([]int, error) {
 		}
 		elems = append(elems, s[:l])
 	}
-	for _, e := range elems {
-		value := e[:1]
-		size := e[1:]
-		val, err := g.GetGrammarPos(value, size)
-		if err != nil {
-			return pos, err
-		}
-		pos = append(pos, val)
-	}
-	return pos, nil
+	return elems
 }
 
 func fromPythonArray(in string) []string {
