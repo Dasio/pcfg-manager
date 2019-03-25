@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"fmt"
+	"github.com/sirupsen/logrus"
 	"sync"
 	"sync/atomic"
 )
@@ -35,6 +37,33 @@ func (g *Generator) worker(jobs <-chan *TreeItem) {
 func (g *Generator) debugger() {
 
 }
+
+func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
+	ch := make(chan *TreeItem, 100)
+	go func() {
+		var err error
+		var item *QueueItem
+		count := 0
+		for err != ErrPriorirtyQueEmpty {
+			if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
+				break
+			}
+			item, err = g.pQue.Next()
+			if err != nil {
+				if err != ErrPriorirtyQueEmpty {
+					logrus.Warn(err)
+				}
+				break
+			}
+			count++
+			fmt.Println(count)
+			ch <- item.Tree
+		}
+		close(ch)
+	}()
+	return ch
+}
+
 func (g *Generator) Run(args *InputArgs) error {
 	g.args = args
 

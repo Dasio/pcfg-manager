@@ -18,6 +18,37 @@ func GrammarFromProto(g *Grammar) *manager.Grammar {
 	}
 }
 
+func TreeItemToProto(i *manager.TreeItem) *TreeItem {
+	if i == nil {
+		return nil
+	}
+	childrens := make([]*TreeItem, 0, len(i.Childrens))
+	for _, ch := range i.Childrens {
+		childrens = append(childrens, TreeItemToProto(ch))
+	}
+	return &TreeItem{
+		Index:      i.Index,
+		Transition: i.Transition,
+		Id:         i.Id,
+		Childrens:  childrens,
+	}
+}
+
+func TreeItemFromProto(i *TreeItem) *manager.TreeItem {
+	if i == nil {
+		return nil
+	}
+	childrens := make([]*manager.TreeItem, 0, len(i.Childrens))
+	for _, ch := range i.Childrens {
+		childrens = append(childrens, TreeItemFromProto(ch))
+	}
+	return &manager.TreeItem{
+		Index:      i.Index,
+		Transition: i.Transition,
+		Id:         i.Id,
+		Childrens:  childrens,
+	}
+}
 func mappingToProto(m manager.GrammarMapping) map[string]*IntMap {
 	res := make(map[string]*IntMap)
 	for k, v := range m {

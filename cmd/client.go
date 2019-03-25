@@ -18,6 +18,9 @@ var clientCmd = &cobra.Command{
 		if err := svc.Connect("localhost:50051"); err != nil {
 			return err
 		}
+		if err := svc.Run(); err != nil {
+			return err
+		}
 		return svc.Disconnect()
 	},
 }

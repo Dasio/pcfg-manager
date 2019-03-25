@@ -6,6 +6,7 @@ package proto;
 service PCFG {
   rpc Connect (Empty) returns (ConnectResponse) {}
   rpc Disconnect(Empty) returns (Empty);
+  rpc GetNextItems(Empty) returns (TreeItems) {}
 }
 
 message Empty {
@@ -15,6 +16,9 @@ message ConnectResponse {
   Grammar grammar = 1;
 }
 
+message CrackingResponse {
+
+}
 message Grammar {
   string ruleName = 1;
   repeated Section sections = 2;
@@ -39,9 +43,12 @@ message Section {
   repeated Replacement replacements = 3;
 }
 
+message TreeItems {
+  repeated TreeItem items = 1;
+}
 message TreeItem {
-  int64 index = 1;
-  int64 transition = 2;
+  int32 index = 1;
+  int32 transition = 2;
   repeated TreeItem childrens = 3;
   bool id = 4;
 }

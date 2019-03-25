@@ -23,6 +23,10 @@ func (m *Manager) Load() error {
 	return nil
 }
 
+func (m *Manager) LoadWithGrammar(g *Grammar) {
+	m.Generator = NewGenerator(NewPcfg(g))
+}
+
 func (m *Manager) Start(input *InputArgs) error {
 	log.Infoln("Rule: ", m.ruleName)
 	log.Infoln("GoRoutines: ", input.GoRoutines)

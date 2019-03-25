@@ -9,11 +9,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 	"net"
+	"time"
 )
 
 type Service struct {
 	port    string
 	mng     *manager.Manager
+	ch      <-chan *manager.TreeItem
 	clients map[string]ClientInfo
 }
 
@@ -30,7 +32,11 @@ type ClientInfo struct {
 
 func (s *Service) Load(ruleName string) error {
 	s.mng = manager.NewManager(ruleName)
-	return s.mng.Load()
+	if err := s.mng.Load(); err != nil {
+		return err
+	}
+	s.ch = s.mng.Generator.RunForServer(&manager.InputArgs{})
+	return nil
 }
 func (s *Service) Run() error {
 	lis, err := net.Listen("tcp", s.port)
@@ -70,4 +76,24 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	logrus.Infof("client %s disconnected", p.Addr.String())
 
 	return &pb.Empty{}, nil
+}
+
+func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItems, error) {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return &pb.TreeItems{}, errors.New("no peer")
+	}
+	_ = p
+	var item *manager.TreeItem
+	select {
+	case it := <-s.ch:
+		item = it
+	case <-time.After(time.Second * 5):
+	}
+	if item == nil {
+		return &pb.TreeItems{}, nil
+	}
+	return &pb.TreeItems{
+		Items: []*pb.TreeItem{pb.TreeItemToProto(item)},
+	}, nil
 }

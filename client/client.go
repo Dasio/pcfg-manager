@@ -12,6 +12,7 @@ import (
 
 type Service struct {
 	c        pb.PCFGClient
+	mng      *manager.Manager
 	grpcConn *grpc.ClientConn
 	grammar  *manager.Grammar
 }
@@ -34,10 +35,33 @@ func (s *Service) Connect(address string) error {
 		return err
 	}
 	s.grammar = pb.GrammarFromProto(r.Grammar)
+	s.mng = manager.NewManager(s.grammar.RuleName)
+	s.mng.LoadWithGrammar(s.grammar)
 	fmt.Println(*s.grammar)
 	return nil
 }
 
+func (s *Service) Run() error {
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		res, err := s.c.GetNextItems(ctx, &pb.Empty{})
+		if err != nil {
+			cancel()
+			return err
+		}
+		if len(res.Items) == 0 {
+			cancel()
+			break
+		}
+		for _, item := range res.Items {
+			treeItem := pb.TreeItemFromProto(item)
+			s.mng.Generator.Pcfg.ListTerminals(treeItem)
+		}
+		cancel()
+	}
+
+	return nil
+}
 func (s *Service) Disconnect() error {
 	if s.grpcConn == nil {
 		return errors.New("no active grpc connection")
