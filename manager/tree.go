@@ -1,8 +1,8 @@
 package manager
 
 type TreeItem struct {
-	Index      int
-	Transition int
+	Index      int32
+	Transition int32
 	Childrens  []*TreeItem
 	Id         bool
 }

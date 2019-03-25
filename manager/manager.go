@@ -3,7 +3,7 @@ package manager
 import log "github.com/sirupsen/logrus"
 
 type Manager struct {
-	generator *Generator
+	Generator *Generator
 	ruleName  string
 }
 
@@ -19,7 +19,7 @@ func (m *Manager) Load() error {
 		return err
 	}
 	pcfg := NewPcfg(grammar)
-	m.generator = NewGenerator(pcfg)
+	m.Generator = NewGenerator(pcfg)
 	return nil
 }
 
@@ -29,7 +29,7 @@ func (m *Manager) Start(input *InputArgs) error {
 	log.Infoln("MaxGuesses: ", input.MaxGuesses)
 	log.Infoln("Debug: ", input.Debug)
 
-	if err := m.generator.Run(input); err != nil {
+	if err := m.Generator.Run(input); err != nil {
 		return err
 	}
 	return nil

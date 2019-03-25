@@ -6,7 +6,7 @@ import (
 )
 
 type Generator struct {
-	pcfg       *Pcfg
+	Pcfg       *Pcfg
 	pQue       *PcfqQueue
 	goRoutines int
 	generated  uint64
@@ -19,14 +19,14 @@ func NewGenerator(pcfg *Pcfg) *Generator {
 		panic(err)
 	}
 	return &Generator{
-		pcfg: pcfg,
+		Pcfg: pcfg,
 		pQue: que,
 	}
 }
 
 func (g *Generator) worker(jobs <-chan *TreeItem) {
 	for j := range jobs {
-		guesses, _, _ := g.pcfg.ListTerminals(j)
+		guesses, _, _ := g.Pcfg.ListTerminals(j)
 		atomic.AddUint64(&g.generated, guesses)
 	}
 
@@ -70,7 +70,7 @@ func (g *Generator) Run(args *InputArgs) error {
 			close(jobs)
 			return err
 		}
-		//guesses, _, _ := g.pcfg.ListTerminals(item.Tree)
+		//guesses, _, _ := g.Pcfg.ListTerminals(item.Tree)
 		//g.generated += guesses
 		jobs <- item.Tree
 	}
