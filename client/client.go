@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/dasio/pcfg-manager/manager"
 	pb "github.com/dasio/pcfg-manager/proto"
 	"google.golang.org/grpc"
@@ -37,30 +36,32 @@ func (s *Service) Connect(address string) error {
 	s.grammar = pb.GrammarFromProto(r.Grammar)
 	s.mng = manager.NewManager(s.grammar.RuleName)
 	s.mng.LoadWithGrammar(s.grammar)
-	fmt.Println(*s.grammar)
 	return nil
 }
 
-func (s *Service) Run() error {
+func (s *Service) Run(done <-chan bool) error {
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		res, err := s.c.GetNextItems(ctx, &pb.Empty{})
-		if err != nil {
+		select {
+		case <-done:
+			return nil
+		default:
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			res, err := s.c.GetNextItems(ctx, &pb.Empty{})
+			if err != nil {
+				cancel()
+				return err
+			}
+			if len(res.Items) == 0 {
+				cancel()
+				return nil
+			}
+			for _, item := range res.Items {
+				treeItem := pb.TreeItemFromProto(item)
+				s.mng.Generator.Pcfg.ListTerminals(treeItem)
+			}
 			cancel()
-			return err
 		}
-		if len(res.Items) == 0 {
-			cancel()
-			break
-		}
-		for _, item := range res.Items {
-			treeItem := pb.TreeItemFromProto(item)
-			s.mng.Generator.Pcfg.ListTerminals(treeItem)
-		}
-		cancel()
 	}
-
-	return nil
 }
 func (s *Service) Disconnect() error {
 	if s.grpcConn == nil {

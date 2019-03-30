@@ -9,7 +9,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 	"net"
+	"sync/atomic"
 	"time"
+)
+
+const (
+	chunkThreshold = uint64(100000)
 )
 
 type Service struct {
@@ -17,17 +22,26 @@ type Service struct {
 	mng     *manager.Manager
 	ch      <-chan *manager.TreeItem
 	clients map[string]ClientInfo
+	chunkId uint32
+}
+
+type Chunk struct {
+	Id             uint32
+	Items          []*pb.TreeItem
+	TerminalsCount uint64
 }
 
 func NewService() *Service {
 	return &Service{
 		port:    ":50051",
 		clients: make(map[string]ClientInfo),
+		chunkId: 1,
 	}
 }
 
 type ClientInfo struct {
-	Addr string
+	Addr        string
+	ActualChunk Chunk
 }
 
 func (s *Service) Load(ruleName string) error {
@@ -78,22 +92,45 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	return &pb.Empty{}, nil
 }
 
+func (s *Service) GetNextChunk() (Chunk, bool) {
+	total := uint64(0)
+	endGen := false
+	var chunkItems []*pb.TreeItem
+loop:
+	for total < chunkThreshold {
+		select {
+		case it := <-s.ch:
+			if it == nil {
+				endGen = true
+				break loop
+			}
+			chunkItems = append(chunkItems, pb.TreeItemToProto(it))
+			guessGeneration := manager.NewGuessGeneration(s.mng.Generator.Pcfg.Grammar, it)
+			total += guessGeneration.Count()
+		case <-time.After(time.Second * 2):
+			break loop
+		}
+	}
+	return Chunk{
+		Id:             atomic.AddUint32(&s.chunkId, 1),
+		Items:          chunkItems,
+		TerminalsCount: total,
+	}, endGen
+}
 func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItems, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return &pb.TreeItems{}, errors.New("no peer")
 	}
-	_ = p
-	var item *manager.TreeItem
-	select {
-	case it := <-s.ch:
-		item = it
-	case <-time.After(time.Second * 5):
+	chunk, endGen := s.GetNextChunk()
+	if endGen {
+		return &pb.TreeItems{}, manager.ErrPriorirtyQueEmpty
 	}
-	if item == nil {
-		return &pb.TreeItems{}, nil
-	}
+	clientInfo := s.clients[p.Addr.String()]
+	clientInfo.ActualChunk = chunk
+	s.clients[p.Addr.String()] = clientInfo
+	logrus.Infof("sending chunk[%d], preTerminals: %d, terminals: %d to %s", chunk.Id, len(chunk.Items), chunk.TerminalsCount, clientInfo.Addr)
 	return &pb.TreeItems{
-		Items: []*pb.TreeItem{pb.TreeItemToProto(item)},
+		Items: chunk.Items,
 	}, nil
 }

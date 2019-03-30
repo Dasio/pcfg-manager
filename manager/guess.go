@@ -134,13 +134,13 @@ func (g *GuessGeneration) Init(section *TreeItem, endOfGuess int) {
 	}
 }
 
-func (g *GuessGeneration) Count() int {
+func (g *GuessGeneration) Count() uint64 {
 	if len(g.structures) == 0 {
 		return 0
 	}
-	r := 1
+	r := uint64(1)
 	for _, s := range g.structures {
-		r *= len(s.replacement.Values)
+		r *= uint64(len(s.replacement.Values))
 	}
 	return r
 

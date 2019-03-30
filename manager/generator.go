@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"fmt"
 	"github.com/sirupsen/logrus"
 	"sync"
 	"sync/atomic"
@@ -43,7 +42,6 @@ func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
 	go func() {
 		var err error
 		var item *QueueItem
-		count := 0
 		for err != ErrPriorirtyQueEmpty {
 			if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
 				break
@@ -55,8 +53,6 @@ func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
 				}
 				break
 			}
-			count++
-			fmt.Println(count)
 			ch <- item.Tree
 		}
 		close(ch)
