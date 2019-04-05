@@ -60,7 +60,7 @@ func (g *GuessIndex) _resetCapitalization(guess []string, new bool) ([]string, b
 		if rule[lPos] == 'U' {
 			tmpString.WriteRune(unicode.ToUpper(ch))
 		} else {
-			tmpString.WriteRune(ch)
+			tmpString.WriteRune(unicode.ToLower(ch))
 		}
 		lPos++
 	}
@@ -95,7 +95,7 @@ func (g *GuessIndex) _nextCapitalization(guess []string, new bool) ([]string, bo
 		if rule[lPos] == 'U' {
 			tmpString.WriteRune(unicode.ToUpper(ch))
 		} else {
-			tmpString.WriteRune(ch)
+			tmpString.WriteRune(unicode.ToLower(ch))
 		}
 		lPos++
 	}
