@@ -3,6 +3,7 @@ package manager
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -49,6 +50,19 @@ func (p *Pcfg) ListTerminals(preTerminal *TreeItem) (uint64, string, string) {
 	buf.Flush()
 	//fmt.Println(guesses)
 	return guesses, first, last
+}
+
+func (p *Pcfg) ListTerminalsToWriter(preTerminal *TreeItem, w io.Writer) error {
+	guessGeneration := NewGuessGeneration(p.Grammar, preTerminal)
+	guess := guessGeneration.First()
+	for guess != "" {
+		fmt.Println(guess)
+		if _, err := fmt.Fprintln(w, guess); err != nil {
+			return err
+		}
+		guess = guessGeneration.Next()
+	}
+	return nil
 }
 
 func PrintChildren(chs []*TreeItem, depth int) {

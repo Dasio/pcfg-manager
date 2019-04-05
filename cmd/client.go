@@ -9,8 +9,15 @@ import (
 	"syscall"
 )
 
+var (
+	hashcatFolder string
+	serverAddress string
+)
+
 func init() {
 	rootCmd.AddCommand(clientCmd)
+	clientCmd.Flags().StringVarP(&serverAddress, "server", "s", "localhost:50051", "server address")
+	clientCmd.Flags().StringVar(&hashcatFolder, "hashcatFolder", "./hashcat", "folder in which is hashcat binary")
 }
 
 var clientCmd = &cobra.Command{
@@ -20,8 +27,11 @@ var clientCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := client.NewService()
-		if err := svc.Connect("localhost:50051"); err != nil {
+		svc, err := client.NewService(hashcatFolder)
+		if err != nil {
+			return err
+		}
+		if err := svc.Connect(serverAddress); err != nil {
 			return err
 		}
 		sigs := make(chan os.Signal, 1)

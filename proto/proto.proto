@@ -7,7 +7,7 @@ service PCFG {
   rpc Connect (Empty) returns (ConnectResponse) {}
   rpc Disconnect(Empty) returns (Empty);
   rpc GetNextItems(Empty) returns (TreeItems) {}
-  rpc SendResult(CrackingResponse) returns (Empty);
+  rpc SendResult(CrackingResponse) returns (ResultResponse);
 }
 
 message Empty {
@@ -16,6 +16,11 @@ message Empty {
 message ConnectResponse {
   Grammar grammar = 1;
   repeated string hashList = 2;
+  string hashcatMode = 3;
+}
+
+message ResultResponse {
+  bool end = 1;
 }
 
 message CrackingResponse {

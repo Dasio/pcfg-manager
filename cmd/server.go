@@ -11,7 +11,7 @@ var (
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
-	serverCmd.PersistentFlags().StringVar(&hashFile, "hashlist", "", "hash list to crack")
+	serverCmd.Flags().StringVar(&hashFile, "hashlist", "", "hash list to crack")
 }
 
 var serverCmd = &cobra.Command{

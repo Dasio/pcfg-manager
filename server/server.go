@@ -105,8 +105,9 @@ func (s *Service) Connect(ctx context.Context, req *pb.Empty) (*pb.ConnectRespon
 	}
 	logrus.Infof("client %s connected", client.Addr)
 	return &pb.ConnectResponse{
-		Grammar:  pb.GrammarToProto(s.mng.Generator.Pcfg.Grammar),
-		HashList: hashList,
+		Grammar:     pb.GrammarToProto(s.mng.Generator.Pcfg.Grammar),
+		HashList:    hashList,
+		HashcatMode: "400",
 	}, nil
 }
 
@@ -153,7 +154,7 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 	}
 	chunk, endGen := s.GetNextChunk()
 	if endGen && len(chunk.Items) == 0 {
-		return &pb.TreeItems{}, manager.ErrPriorirtyQueEmpty
+		return &pb.TreeItems{}, nil
 	}
 	clientInfo := s.clients[p.Addr.String()]
 	clientInfo.ActualChunk = chunk
@@ -164,10 +165,10 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 	}, nil
 }
 
-func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.Empty, error) {
+func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.ResultResponse, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return &pb.Empty{}, errors.New("no peer")
+		return &pb.ResultResponse{End: false}, errors.New("no peer")
 	}
 	clientInfo := s.clients[p.Addr.String()]
 	for hash, password := range in.Hashes {
@@ -177,8 +178,10 @@ func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.
 	logrus.Infof("result from %s: %d", clientInfo.Addr, len(in.Hashes))
 	if len(s.remainingHashes) == 0 {
 		s.endCracking <- true
+		return &pb.ResultResponse{End: true}, nil
+
 	}
-	return &pb.Empty{}, nil
+	return &pb.ResultResponse{End: false}, nil
 }
 
 func readLines(path string) ([]string, error) {

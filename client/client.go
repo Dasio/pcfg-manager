@@ -3,28 +3,62 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/dasio/pcfg-manager/manager"
 	pb "github.com/dasio/pcfg-manager/proto"
 	"google.golang.org/grpc"
+	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
 
 type Service struct {
-	c        pb.PCFGClient
-	mng      *manager.Manager
-	grpcConn *grpc.ClientConn
-	grammar  *manager.Grammar
-	hashFile string
+	c           pb.PCFGClient
+	mng         *manager.Manager
+	grpcConn    *grpc.ClientConn
+	grammar     *manager.Grammar
+	hashFile    string
+	hashcatPath string
+	hashcatPipe io.WriteCloser
+	hashcatDone chan bool
 	// tmp
 	hashes []string
 }
 
-func NewService() *Service {
-	return &Service{}
+func NewService(hashcatFolder string) (*Service, error) {
+	path, err := filepath.Abs(hashcatFolder + "/" + getHashcatBinary())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil, err
+	}
+	svc := &Service{
+		hashcatPath: path,
+		hashcatDone: make(chan bool, 1),
+	}
+	return svc, nil
+}
+
+func getHashcatBinary() string {
+	var ext string
+	if runtime.GOOS == "windows" {
+		ext = "exe"
+	} else {
+		ext = "bin"
+	}
+	arch := "32"
+	if strings.HasSuffix(runtime.GOARCH, "64") {
+		arch = "64"
+	}
+	return fmt.Sprintf("hashcat%s.%s", arch, ext)
 }
 
 func (s *Service) Connect(address string) error {
@@ -56,6 +90,24 @@ func (s *Service) Connect(address string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
+	if _, err := os.Stat(f.Name()); os.IsNotExist(err) {
+		return err
+	}
+
+	cmd := exec.Command(s.hashcatPath, "-m", r.HashcatMode, "--force", "-O", "-o", "results.txt", "-w", "1", f.Name())
+	cmd.Stdout = os.Stdout
+	pipe, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	s.hashcatPipe = pipe
+	go func() {
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("HASHCAT DONE")
+		s.hashcatDone <- true
+	}()
 
 	return nil
 }
@@ -79,17 +131,26 @@ func (s *Service) Run(done <-chan bool) error {
 				if err != nil {
 					return err
 				}
+				<-s.hashcatDone
 				return nil
 			}
 			for _, item := range res.Items {
 				treeItem := pb.TreeItemFromProto(item)
-				s.mng.Generator.Pcfg.ListTerminals(treeItem)
+				//s.mng.Generator.Pcfg.ListTerminals(treeItem)
+				err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, s.hashcatPipe)
+				if err != nil {
+					return err
+				}
 			}
-			_, err = s.c.SendResult(context.Background(), &pb.CrackingResponse{
+			resultRes, err := s.c.SendResult(context.Background(), &pb.CrackingResponse{
 				Hashes: s.randomResult(),
 			})
 			if err != nil {
 				return err
+			}
+			if resultRes.End {
+				<-s.hashcatDone
+				return nil
 			}
 
 		}
