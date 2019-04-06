@@ -26,6 +26,7 @@ type Service struct {
 	mng         *manager.Manager
 	grpcConn    *grpc.ClientConn
 	grammar     *manager.Grammar
+	genOnly     bool
 	hashFile    string
 	hashcatPath string
 	hashcatMode string
@@ -34,18 +35,24 @@ type Service struct {
 	hashes []string
 }
 
+type InputArgs struct {
+	ServerAddress string
+	HashcatFolder string
+	GenOnly       bool
+}
+
 const (
-	HS_CODE_GPU_WATCHDOG_ALARM    = -2
-	HS_CODE_ERROR                 = -1
-	HS_CODE_OK                    = 0
-	HS_CODE_EXHAUSTED             = 1
-	HS_CODE_ABORTED               = 2
-	HS_CODE_ABORTED_BY_CHECKPOINT = 3
-	HS_CODE_ABORTED_BY_RUNE       = 4
+	HsCodeGpuWatchdogAlarm    = -2
+	HsCodeError               = -1
+	HsCodeOk                  = 0
+	HsCodeExhausted           = 1
+	HsCodeAborted             = 2
+	HsCodeAbortedByCheckpoint = 3
+	HsCodeAbortedByRune       = 4
 )
 
-func NewService(hashcatFolder string) (*Service, error) {
-	path, err := filepath.Abs(hashcatFolder + "/" + getHashcatBinary())
+func NewService(inArgs InputArgs) (*Service, error) {
+	path, err := filepath.Abs(inArgs.HashcatFolder + "/" + getHashcatBinary())
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +61,7 @@ func NewService(hashcatFolder string) (*Service, error) {
 	}
 	svc := &Service{
 		hashcatPath: path,
+		genOnly:     inArgs.GenOnly,
 	}
 	return svc, nil
 }
@@ -126,7 +134,7 @@ func (s *Service) Run(done <-chan bool) error {
 		case <-done:
 			return nil
 		default:
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 			res, err := s.c.GetNextItems(ctx, &pb.Empty{}, grpc.MaxCallRecvMsgSize(math.MaxInt32))
 			if err != nil {
 				cancel()
@@ -142,7 +150,13 @@ func (s *Service) Run(done <-chan bool) error {
 				}
 				return nil
 			}
-			results, err := s.startCracking(res.Items)
+			var results map[string]string
+			if s.genOnly {
+				results, err = s.generateOnly(res.Items)
+			} else {
+				results, err = s.startCracking(res.Items)
+
+			}
 			if err != nil {
 				return err
 			}
@@ -161,6 +175,16 @@ func (s *Service) Run(done <-chan bool) error {
 		}
 	}
 }
+func (s *Service) generateOnly(preTerminals []*pb.TreeItem) (map[string]string, error) {
+	for _, item := range preTerminals {
+		treeItem := pb.TreeItemFromProto(item)
+		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, os.Stdout)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return map[string]string{}, nil
+}
 func (s *Service) startCracking(preTerminals []*pb.TreeItem) (map[string]string, error) {
 	cmd, err := s.startHashcat()
 	if err != nil {
@@ -178,7 +202,7 @@ func (s *Service) startCracking(preTerminals []*pb.TreeItem) (map[string]string,
 	}
 	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() != HS_CODE_OK && exitErr.ExitCode() != HS_CODE_EXHAUSTED {
+			if exitErr.ExitCode() != HsCodeOk && exitErr.ExitCode() != HsCodeExhausted {
 				return nil, err
 			}
 		}

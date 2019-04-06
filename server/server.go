@@ -18,7 +18,7 @@ import (
 
 const (
 	chunkStartSize = uint64(10000)
-	chunkDuration  = time.Minute * 2
+	chunkDuration  = time.Second * 15
 )
 
 type Service struct {

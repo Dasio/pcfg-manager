@@ -10,14 +10,15 @@ import (
 )
 
 var (
-	hashcatFolder string
-	serverAddress string
+	clientArgs client.InputArgs
 )
 
 func init() {
 	rootCmd.AddCommand(clientCmd)
-	clientCmd.Flags().StringVarP(&serverAddress, "server", "s", "localhost:50051", "server address")
-	clientCmd.Flags().StringVar(&hashcatFolder, "hashcatFolder", "./hashcat", "folder in which is hashcat binary")
+	clientCmd.Flags().StringVarP(&clientArgs.ServerAddress, "server", "s", "localhost:50051", "server address")
+	clientCmd.Flags().StringVar(&clientArgs.HashcatFolder, "hashcatFolder", "./hashcat", "folder in which is hashcat binary")
+	clientCmd.Flags().BoolVar(&clientArgs.GenOnly, "generateOnly", false, "generation guesses without cracking")
+
 }
 
 var clientCmd = &cobra.Command{
@@ -27,11 +28,11 @@ var clientCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc, err := client.NewService(hashcatFolder)
+		svc, err := client.NewService(clientArgs)
 		if err != nil {
 			return err
 		}
-		if err := svc.Connect(serverAddress); err != nil {
+		if err := svc.Connect(clientArgs.ServerAddress); err != nil {
 			return err
 		}
 		sigs := make(chan os.Signal, 1)
