@@ -17,18 +17,26 @@ import (
 )
 
 const (
-	chunkThreshold = uint64(100000)
+	chunkStartSize = uint64(10000)
+	chunkDuration  = time.Minute * 2
 )
 
 type Service struct {
 	port            string
 	mng             *manager.Manager
+	args            InputArgs
 	remainingHashes map[string]struct{}
 	completedHashes map[string]string
 	ch              <-chan *manager.TreeItem
 	clients         map[string]ClientInfo
 	chunkId         uint32
 	endCracking     chan bool
+}
+
+type InputArgs struct {
+	RuleName    string
+	HashFile    string
+	HashcatMode string
 }
 
 type Chunk struct {
@@ -48,10 +56,13 @@ func NewService() *Service {
 type ClientInfo struct {
 	Addr        string
 	ActualChunk Chunk
+	StartTime   time.Time
+	EndTime     time.Time
 }
 
-func (s *Service) Load(ruleName, hashFile string) error {
-	lines, err := readLines(hashFile)
+func (s *Service) Load(args InputArgs) error {
+	s.args = args
+	lines, err := readLines(s.args.HashFile)
 	if err != nil {
 		return err
 	}
@@ -61,8 +72,7 @@ func (s *Service) Load(ruleName, hashFile string) error {
 	for _, l := range lines {
 		s.remainingHashes[l] = struct{}{}
 	}
-	fmt.Println(s.remainingHashes)
-	s.mng = manager.NewManager(ruleName)
+	s.mng = manager.NewManager(s.args.RuleName)
 	if err := s.mng.Load(); err != nil {
 		return err
 	}
@@ -107,7 +117,7 @@ func (s *Service) Connect(ctx context.Context, req *pb.Empty) (*pb.ConnectRespon
 	return &pb.ConnectResponse{
 		Grammar:     pb.GrammarToProto(s.mng.Generator.Pcfg.Grammar),
 		HashList:    hashList,
-		HashcatMode: "400",
+		HashcatMode: s.args.HashcatMode,
 	}, nil
 }
 
@@ -122,12 +132,12 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	return &pb.Empty{}, nil
 }
 
-func (s *Service) GetNextChunk() (Chunk, bool) {
+func (s *Service) GetNextChunk(size uint64) (Chunk, bool) {
 	total := uint64(0)
 	endGen := false
 	var chunkItems []*pb.TreeItem
 loop:
-	for total < chunkThreshold {
+	for total < size {
 		select {
 		case it := <-s.ch:
 			if it == nil {
@@ -152,12 +162,18 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 	if !ok {
 		return &pb.TreeItems{}, errors.New("no peer")
 	}
-	chunk, endGen := s.GetNextChunk()
+	clientInfo := s.clients[p.Addr.String()]
+	chunkSize := chunkStartSize
+	if !clientInfo.EndTime.IsZero() {
+		speed := float64(clientInfo.ActualChunk.TerminalsCount) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
+		chunkSize = uint64(speed * chunkDuration.Seconds())
+	}
+	chunk, endGen := s.GetNextChunk(chunkSize)
 	if endGen && len(chunk.Items) == 0 {
 		return &pb.TreeItems{}, nil
 	}
-	clientInfo := s.clients[p.Addr.String()]
 	clientInfo.ActualChunk = chunk
+	clientInfo.StartTime = time.Now()
 	s.clients[p.Addr.String()] = clientInfo
 	logrus.Infof("sending chunk[%d], preTerminals: %d, terminals: %d to %s", chunk.Id, len(chunk.Items), chunk.TerminalsCount, clientInfo.Addr)
 	return &pb.TreeItems{
@@ -175,11 +191,13 @@ func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.
 		delete(s.remainingHashes, hash)
 		s.completedHashes[hash] = password
 	}
-	logrus.Infof("result from %s: %d", clientInfo.Addr, len(in.Hashes))
+	clientInfo.EndTime = time.Now()
+	s.clients[p.Addr.String()] = clientInfo
+
+	logrus.Infof("result from %s: %d in %f seconds", clientInfo.Addr, len(in.Hashes), clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds())
 	if len(s.remainingHashes) == 0 {
 		s.endCracking <- true
 		return &pb.ResultResponse{End: true}, nil
-
 	}
 	return &pb.ResultResponse{End: false}, nil
 }

@@ -55,14 +55,14 @@ func (p *Pcfg) ListTerminals(preTerminal *TreeItem) (uint64, string, string) {
 func (p *Pcfg) ListTerminalsToWriter(preTerminal *TreeItem, w io.Writer) error {
 	guessGeneration := NewGuessGeneration(p.Grammar, preTerminal)
 	guess := guessGeneration.First()
+	buf := bufio.NewWriter(w)
 	for guess != "" {
-		fmt.Println(guess)
-		if _, err := fmt.Fprintln(w, guess); err != nil {
+		if _, err := fmt.Fprintln(buf, guess); err != nil {
 			return err
 		}
 		guess = guessGeneration.Next()
 	}
-	return nil
+	return buf.Flush()
 }
 
 func PrintChildren(chs []*TreeItem, depth int) {

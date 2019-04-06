@@ -1,15 +1,17 @@
 package client
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/dasio/pcfg-manager/manager"
 	pb "github.com/dasio/pcfg-manager/proto"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"io"
 	"io/ioutil"
-	"log"
+	"math"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -26,11 +28,21 @@ type Service struct {
 	grammar     *manager.Grammar
 	hashFile    string
 	hashcatPath string
+	hashcatMode string
 	hashcatPipe io.WriteCloser
-	hashcatDone chan bool
 	// tmp
 	hashes []string
 }
+
+const (
+	HS_CODE_GPU_WATCHDOG_ALARM    = -2
+	HS_CODE_ERROR                 = -1
+	HS_CODE_OK                    = 0
+	HS_CODE_EXHAUSTED             = 1
+	HS_CODE_ABORTED               = 2
+	HS_CODE_ABORTED_BY_CHECKPOINT = 3
+	HS_CODE_ABORTED_BY_RUNE       = 4
+)
 
 func NewService(hashcatFolder string) (*Service, error) {
 	path, err := filepath.Abs(hashcatFolder + "/" + getHashcatBinary())
@@ -42,7 +54,6 @@ func NewService(hashcatFolder string) (*Service, error) {
 	}
 	svc := &Service{
 		hashcatPath: path,
-		hashcatDone: make(chan bool, 1),
 	}
 	return svc, nil
 }
@@ -83,6 +94,7 @@ func (s *Service) Connect(address string) error {
 	}
 	// tmp
 	s.hashes = r.HashList
+	s.hashcatMode = r.HashcatMode
 	s.hashFile = f.Name()
 	if _, err := f.Write([]byte(strings.Join(r.HashList, "\n"))); err != nil {
 		return err
@@ -90,26 +102,22 @@ func (s *Service) Connect(address string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if _, err := os.Stat(f.Name()); os.IsNotExist(err) {
-		return err
-	}
-
-	cmd := exec.Command(s.hashcatPath, "-m", r.HashcatMode, "--force", "-O", "-o", "results.txt", "-w", "1", f.Name())
-	cmd.Stdout = os.Stdout
-	pipe, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	s.hashcatPipe = pipe
-	go func() {
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println("HASHCAT DONE")
-		s.hashcatDone <- true
-	}()
 
 	return nil
+}
+
+func (s *Service) startHashcat() (*exec.Cmd, error) {
+	cmd := exec.Command(s.hashcatPath, "-m", s.hashcatMode, "--force", "-O", "-o", "results.txt", "-w", "1", "--machine-readable", "--status", s.hashFile)
+	//cmd.Stdout = os.Stdout
+	pipe, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	s.hashcatPipe = pipe
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd, nil
 }
 
 func (s *Service) Run(done <-chan bool) error {
@@ -119,42 +127,86 @@ func (s *Service) Run(done <-chan bool) error {
 			return nil
 		default:
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-			res, err := s.c.GetNextItems(ctx, &pb.Empty{})
+			res, err := s.c.GetNextItems(ctx, &pb.Empty{}, grpc.MaxCallRecvMsgSize(math.MaxInt32))
 			if err != nil {
 				cancel()
 				_, _ = s.c.SendResult(ctx, &pb.CrackingResponse{})
 				return err
 			}
+			logrus.Infof("received %d preTerminals", len(res.Items))
 			cancel()
 			if len(res.Items) == 0 {
 				_, err = s.c.SendResult(context.Background(), &pb.CrackingResponse{})
 				if err != nil {
 					return err
 				}
-				<-s.hashcatDone
 				return nil
 			}
-			for _, item := range res.Items {
-				treeItem := pb.TreeItemFromProto(item)
-				//s.mng.Generator.Pcfg.ListTerminals(treeItem)
-				err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, s.hashcatPipe)
-				if err != nil {
-					return err
-				}
+			results, err := s.startCracking(res.Items)
+			if err != nil {
+				return err
 			}
 			resultRes, err := s.c.SendResult(context.Background(), &pb.CrackingResponse{
-				Hashes: s.randomResult(),
+				Hashes: results,
 			})
+			logrus.Infof("sending %d cracked hashes", len(results))
+
 			if err != nil {
 				return err
 			}
 			if resultRes.End {
-				<-s.hashcatDone
 				return nil
 			}
 
 		}
 	}
+}
+func (s *Service) startCracking(preTerminals []*pb.TreeItem) (map[string]string, error) {
+	cmd, err := s.startHashcat()
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range preTerminals {
+		treeItem := pb.TreeItemFromProto(item)
+		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, s.hashcatPipe)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := s.hashcatPipe.Close(); err != nil {
+		return nil, err
+	}
+	if err := cmd.Wait(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() != HS_CODE_OK && exitErr.ExitCode() != HS_CODE_EXHAUSTED {
+				return nil, err
+			}
+		}
+	}
+	results, err := getResults("results.txt")
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func getResults(path string) (map[string]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	res := make(map[string]string)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		split := strings.Split(scanner.Text(), ":")
+		if len(split) != 2 {
+			continue
+		}
+		res[split[0]] = split[1]
+	}
+	return res, scanner.Err()
 }
 
 func (s *Service) randomResult() map[string]string {

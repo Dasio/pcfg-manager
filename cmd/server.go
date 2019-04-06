@@ -6,12 +6,14 @@ import (
 )
 
 var (
-	hashFile string
+	inputArg server.InputArgs
 )
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
-	serverCmd.Flags().StringVar(&hashFile, "hashlist", "", "hash list to crack")
+	serverCmd.Flags().StringVar(&inputArg.HashFile, "hashlist", "", "hash list to crack")
+	serverCmd.Flags().StringVar(&inputArg.HashcatMode, "hashcatMode", "0", "hashcat mode of hash")
+
 }
 
 var serverCmd = &cobra.Command{
@@ -20,7 +22,8 @@ var serverCmd = &cobra.Command{
 	Long:  "run server",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		svc := server.NewService()
-		if err := svc.Load(ruleName, hashFile); err != nil {
+		inputArg.RuleName = ruleName
+		if err := svc.Load(inputArg); err != nil {
 			return err
 		}
 		return svc.Run()
