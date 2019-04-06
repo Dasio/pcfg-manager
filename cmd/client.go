@@ -41,6 +41,8 @@ var clientCmd = &cobra.Command{
 		go func() {
 			<-sigs
 			done <- true
+			_ = svc.Disconnect()
+			os.Exit(1)
 		}()
 		if err := svc.Run(done); err != nil {
 			logrus.Warn(err)

@@ -12,12 +12,13 @@ import (
 	"google.golang.org/grpc/peer"
 	"net"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 const (
-	chunkStartSize = uint64(10000)
+	chunkStartSize = uint64(100000)
 	chunkDuration  = time.Second * 15
 )
 
@@ -27,6 +28,8 @@ type Service struct {
 	args            InputArgs
 	remainingHashes map[string]struct{}
 	completedHashes map[string]string
+	generatorCh     <-chan *manager.TreeItem
+	priorityCh      chan *manager.TreeItem
 	ch              <-chan *manager.TreeItem
 	clients         map[string]ClientInfo
 	chunkId         uint32
@@ -54,10 +57,11 @@ func NewService() *Service {
 }
 
 type ClientInfo struct {
-	Addr        string
-	ActualChunk Chunk
-	StartTime   time.Time
-	EndTime     time.Time
+	Addr              string
+	ActualChunk       Chunk
+	StartTime         time.Time
+	EndTime           time.Time
+	PreviousTerminals uint64
 }
 
 func (s *Service) Load(args InputArgs) error {
@@ -76,7 +80,9 @@ func (s *Service) Load(args InputArgs) error {
 	if err := s.mng.Load(); err != nil {
 		return err
 	}
-	s.ch = s.mng.Generator.RunForServer(&manager.InputArgs{})
+	s.generatorCh = s.mng.Generator.RunForServer(&manager.InputArgs{})
+	s.priorityCh = make(chan *manager.TreeItem)
+	s.ch = mergeChannels(s.generatorCh, s.priorityCh)
 	return nil
 }
 func (s *Service) Run() error {
@@ -126,6 +132,14 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	if !ok {
 		return &pb.Empty{}, errors.New("no peer")
 	}
+	clientInfo := s.clients[p.Addr.String()]
+	if clientInfo.ActualChunk.Id != 0 {
+		logrus.Infof("client %s did not finished chunk[%d], sending %d preterminals back to channel",
+			clientInfo.Addr, clientInfo.ActualChunk.Id, len(clientInfo.ActualChunk.Items))
+		for _, it := range clientInfo.ActualChunk.Items {
+			s.priorityCh <- pb.TreeItemFromProto(it)
+		}
+	}
 	delete(s.clients, p.Addr.String())
 	logrus.Infof("client %s disconnected", p.Addr.String())
 
@@ -157,6 +171,25 @@ loop:
 		TerminalsCount: total,
 	}, endGen
 }
+
+func mergeChannels(cs ...<-chan *manager.TreeItem) <-chan *manager.TreeItem {
+	out := make(chan *manager.TreeItem)
+	var wg sync.WaitGroup
+	wg.Add(len(cs))
+	for _, c := range cs {
+		go func(c <-chan *manager.TreeItem) {
+			for v := range c {
+				out <- v
+			}
+			wg.Done()
+		}(c)
+	}
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
+}
 func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItems, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
@@ -164,8 +197,8 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 	}
 	clientInfo := s.clients[p.Addr.String()]
 	chunkSize := chunkStartSize
-	if !clientInfo.EndTime.IsZero() {
-		speed := float64(clientInfo.ActualChunk.TerminalsCount) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
+	if !clientInfo.EndTime.IsZero() && clientInfo.PreviousTerminals != 0 {
+		speed := float64(clientInfo.PreviousTerminals) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
 		chunkSize = uint64(speed * chunkDuration.Seconds())
 	}
 	chunk, endGen := s.GetNextChunk(chunkSize)
@@ -192,6 +225,8 @@ func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.
 		s.completedHashes[hash] = password
 	}
 	clientInfo.EndTime = time.Now()
+	clientInfo.PreviousTerminals = clientInfo.ActualChunk.TerminalsCount
+	clientInfo.ActualChunk = Chunk{}
 	s.clients[p.Addr.String()] = clientInfo
 
 	logrus.Infof("result from %s: %d in %f seconds", clientInfo.Addr, len(in.Hashes), clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds())

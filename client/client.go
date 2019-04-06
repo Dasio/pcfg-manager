@@ -117,6 +117,7 @@ func (s *Service) Connect(address string) error {
 func (s *Service) startHashcat() (*exec.Cmd, error) {
 	cmd := exec.Command(s.hashcatPath, "-m", s.hashcatMode, "--force", "-O", "-o", "results.txt", "-w", "1", "--machine-readable", "--status", s.hashFile)
 	//cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	pipe, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -155,7 +156,6 @@ func (s *Service) Run(done <-chan bool) error {
 				results, err = s.generateOnly(res.Items)
 			} else {
 				results, err = s.startCracking(res.Items)
-
 			}
 			if err != nil {
 				return err
