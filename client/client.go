@@ -217,6 +217,9 @@ func (s *Service) startCracking(preTerminals []*pb.TreeItem) (map[string]string,
 func getResults(path string) (map[string]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
+		if err == os.ErrNotExist {
+			return map[string]string{}, nil
+		}
 		return nil, err
 	}
 	defer file.Close()

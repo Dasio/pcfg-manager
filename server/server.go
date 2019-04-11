@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"google.golang.org/grpc/peer"
 	"net"
 	"os"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -23,8 +23,7 @@ type Service struct {
 	remainingHashes map[string]struct{}
 	completedHashes map[string]string
 	generatorCh     <-chan *manager.TreeItem
-	priorityCh      chan *manager.TreeItem
-	ch              <-chan *manager.TreeItem
+	returnedChunks  *list.List
 	clients         map[string]ClientInfo
 	chunkId         uint32
 	endCracking     chan bool
@@ -60,6 +59,7 @@ func (s *Service) Load(args manager.InputArgs) error {
 	s.remainingHashes = make(map[string]struct{})
 	s.completedHashes = make(map[string]string)
 	s.endCracking = make(chan bool)
+	s.returnedChunks = list.New()
 	for _, l := range lines {
 		s.remainingHashes[l] = struct{}{}
 	}
@@ -68,8 +68,6 @@ func (s *Service) Load(args manager.InputArgs) error {
 		return err
 	}
 	s.generatorCh = s.mng.Generator.RunForServer(&args)
-	s.priorityCh = make(chan *manager.TreeItem)
-	s.ch = mergeChannels(s.generatorCh, s.priorityCh)
 	return nil
 }
 func (s *Service) Run() error {
@@ -126,9 +124,7 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	if clientInfo.ActualChunk.Id != 0 {
 		logrus.Infof("client %s did not finished chunk[%d], sending %d preterminals back to channel",
 			clientInfo.Addr, clientInfo.ActualChunk.Id, len(clientInfo.ActualChunk.Items))
-		for _, it := range clientInfo.ActualChunk.Items {
-			s.priorityCh <- pb.TreeItemFromProto(it)
-		}
+		s.returnedChunks.PushBack(&clientInfo.ActualChunk)
 	}
 	delete(s.clients, p.Addr.String())
 	logrus.Infof("client %s disconnected", p.Addr.String())
@@ -139,11 +135,19 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 func (s *Service) GetNextChunk(size uint64) (Chunk, bool) {
 	total := uint64(0)
 	endGen := false
+	for e := s.returnedChunks.Front(); e != nil; e = e.Next() {
+		// do something with e.Value
+		chunk := e.Value.(*Chunk)
+		if chunk.TerminalsCount < uint64(float64(size)*1.1) {
+			s.returnedChunks.Remove(e)
+			return *chunk, false
+		}
+	}
 	var chunkItems []*pb.TreeItem
 loop:
 	for total < size {
 		select {
-		case it := <-s.ch:
+		case it := <-s.generatorCh:
 			if it == nil {
 				endGen = true
 				break loop
@@ -162,24 +166,6 @@ loop:
 	}, endGen
 }
 
-func mergeChannels(cs ...<-chan *manager.TreeItem) <-chan *manager.TreeItem {
-	out := make(chan *manager.TreeItem)
-	var wg sync.WaitGroup
-	wg.Add(len(cs))
-	for _, c := range cs {
-		go func(c <-chan *manager.TreeItem) {
-			for v := range c {
-				out <- v
-			}
-			wg.Done()
-		}(c)
-	}
-	go func() {
-		wg.Wait()
-		close(out)
-	}()
-	return out
-}
 func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItems, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
