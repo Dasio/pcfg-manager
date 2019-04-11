@@ -17,15 +17,9 @@ import (
 	"time"
 )
 
-const (
-	chunkStartSize = uint64(100000)
-	chunkDuration  = time.Second * 15
-)
-
 type Service struct {
-	port            string
 	mng             *manager.Manager
-	args            InputArgs
+	args            manager.InputArgs
 	remainingHashes map[string]struct{}
 	completedHashes map[string]string
 	generatorCh     <-chan *manager.TreeItem
@@ -36,12 +30,6 @@ type Service struct {
 	endCracking     chan bool
 }
 
-type InputArgs struct {
-	RuleName    string
-	HashFile    string
-	HashcatMode string
-}
-
 type Chunk struct {
 	Id             uint32
 	Items          []*pb.TreeItem
@@ -50,7 +38,6 @@ type Chunk struct {
 
 func NewService() *Service {
 	return &Service{
-		port:    ":50051",
 		clients: make(map[string]ClientInfo),
 		chunkId: 0,
 	}
@@ -64,7 +51,7 @@ type ClientInfo struct {
 	PreviousTerminals uint64
 }
 
-func (s *Service) Load(args InputArgs) error {
+func (s *Service) Load(args manager.InputArgs) error {
 	s.args = args
 	lines, err := readLines(s.args.HashFile)
 	if err != nil {
@@ -80,19 +67,19 @@ func (s *Service) Load(args InputArgs) error {
 	if err := s.mng.Load(); err != nil {
 		return err
 	}
-	s.generatorCh = s.mng.Generator.RunForServer(&manager.InputArgs{})
+	s.generatorCh = s.mng.Generator.RunForServer(&args)
 	s.priorityCh = make(chan *manager.TreeItem)
 	s.ch = mergeChannels(s.generatorCh, s.priorityCh)
 	return nil
 }
 func (s *Service) Run() error {
-	lis, err := net.Listen("tcp", s.port)
+	lis, err := net.Listen("tcp", ":"+s.args.Port)
 	if err != nil {
 		return err
 	}
 	server := grpc.NewServer()
 	pb.RegisterPCFGServer(server, s)
-	logrus.Infof("Listening on port %s", s.port)
+	logrus.Infof("Listening on port %s", s.args.Port)
 	go func() {
 		<-s.endCracking
 		server.GracefulStop()
@@ -132,7 +119,10 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	if !ok {
 		return &pb.Empty{}, errors.New("no peer")
 	}
-	clientInfo := s.clients[p.Addr.String()]
+	clientInfo, ok := s.clients[p.Addr.String()]
+	if !ok {
+		return &pb.Empty{}, errors.New("client wasn't connected")
+	}
 	if clientInfo.ActualChunk.Id != 0 {
 		logrus.Infof("client %s did not finished chunk[%d], sending %d preterminals back to channel",
 			clientInfo.Addr, clientInfo.ActualChunk.Id, len(clientInfo.ActualChunk.Items))
@@ -195,11 +185,12 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 	if !ok {
 		return &pb.TreeItems{}, errors.New("no peer")
 	}
+	then := time.Now()
 	clientInfo := s.clients[p.Addr.String()]
-	chunkSize := chunkStartSize
+	chunkSize := s.args.ChunkStartSize
 	if !clientInfo.EndTime.IsZero() && clientInfo.PreviousTerminals != 0 {
 		speed := float64(clientInfo.PreviousTerminals) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
-		chunkSize = uint64(speed * chunkDuration.Seconds())
+		chunkSize = uint64(speed * s.args.ChunkDuration.Seconds())
 	}
 	chunk, endGen := s.GetNextChunk(chunkSize)
 	if endGen && len(chunk.Items) == 0 {
@@ -208,7 +199,8 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 	clientInfo.ActualChunk = chunk
 	clientInfo.StartTime = time.Now()
 	s.clients[p.Addr.String()] = clientInfo
-	logrus.Infof("sending chunk[%d], preTerminals: %d, terminals: %d to %s", chunk.Id, len(chunk.Items), chunk.TerminalsCount, clientInfo.Addr)
+	logrus.Infof("sending chunk[%d], preTerminals: %d, terminals: %d to %s in %s",
+		chunk.Id, len(chunk.Items), chunk.TerminalsCount, clientInfo.Addr, time.Now().Sub(then).String())
 	return &pb.TreeItems{
 		Items: chunk.Items,
 	}, nil

@@ -14,10 +14,6 @@ type Generator struct {
 	args       *InputArgs
 }
 
-const (
-	TerminalsQueueSize = 1000000
-)
-
 func NewGenerator(pcfg *Pcfg) *Generator {
 	que, err := NewPcfgQueue(pcfg)
 	if err != nil {
@@ -42,7 +38,12 @@ func (g *Generator) debugger() {
 }
 
 func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
-	ch := make(chan *TreeItem, TerminalsQueueSize)
+	var ch chan *TreeItem
+	if args.TerminalsQueSize > 0 {
+		ch = make(chan *TreeItem, args.TerminalsQueSize)
+	} else {
+		ch = make(chan *TreeItem)
+	}
 	go func() {
 		var err error
 		var item *QueueItem
