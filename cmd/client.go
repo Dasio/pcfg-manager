@@ -44,7 +44,7 @@ var clientCmd = &cobra.Command{
 			_ = svc.Disconnect()
 			os.Exit(1)
 		}()
-		if err := svc.Run(done); err != nil {
+		if err := svc.Run(done); err != nil && err != client.ErrFinished {
 			logrus.Warn(err)
 		}
 		return svc.Disconnect()

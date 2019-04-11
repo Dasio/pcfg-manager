@@ -51,6 +51,10 @@ const (
 	HsCodeAbortedByRune       = 4
 )
 
+var (
+	ErrFinished = errors.New("server finished cracking")
+)
+
 func NewService(inArgs InputArgs) (*Service, error) {
 	path, err := filepath.Abs(inArgs.HashcatFolder + "/" + getHashcatBinary())
 	if err != nil {
@@ -169,7 +173,7 @@ func (s *Service) Run(done <-chan bool) error {
 				return err
 			}
 			if resultRes.End {
-				return nil
+				return ErrFinished
 			}
 
 		}
@@ -249,7 +253,7 @@ func (s *Service) Disconnect() error {
 	if s.grpcConn == nil {
 		return errors.New("no active grpc connection")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	if _, err := s.c.Disconnect(ctx, &pb.Empty{}); err != nil {
 		return err

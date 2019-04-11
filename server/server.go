@@ -15,6 +15,7 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
+	"unicode"
 )
 
 type Service struct {
@@ -61,7 +62,9 @@ func (s *Service) Load(args manager.InputArgs) error {
 	s.endCracking = make(chan bool)
 	s.returnedChunks = list.New()
 	for _, l := range lines {
-		s.remainingHashes[l] = struct{}{}
+		if len(l) > 0 && !unicode.IsSpace(rune(l[0])) {
+			s.remainingHashes[l] = struct{}{}
+		}
 	}
 	s.mng = manager.NewManager(s.args.RuleName)
 	if err := s.mng.Load(); err != nil {
