@@ -7,7 +7,7 @@ import (
 )
 
 type Generator struct {
-  generated  uint64
+	generated  uint64
 	Pcfg       *Pcfg
 	pQue       *PcfqQueue
 	goRoutines int
@@ -89,7 +89,7 @@ func (g *Generator) Run(args *InputArgs) error {
 	}
 
 	for err != ErrPriorirtyQueEmpty {
-		if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
+		if args.MaxGuesses > 0 && atomic.LoadUint64(&g.generated) >= args.MaxGuesses {
 			break
 		}
 		item, err = g.pQue.Next()
