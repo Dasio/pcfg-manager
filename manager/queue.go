@@ -72,7 +72,7 @@ func NewPcfgQueue(pcfg *Pcfg) (*PcfqQueue, error) {
 	heap.Init(&q.pQue)
 	index := q.pcfg.StartIndex()
 	if index == -1 {
-		return nil, errors.New("could not find starting position for the pcfg")
+		return nil, errors.New("could not find starting position for the Pcfg")
 	}
 	tree := &TreeItem{
 		Index:      index,

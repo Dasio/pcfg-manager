@@ -3,37 +3,38 @@ package manager
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
 
 type Pcfg struct {
-	grammar *Grammar
+	Grammar *Grammar
 }
 
 func NewPcfg(g *Grammar) *Pcfg {
 	return &Pcfg{
-		grammar: g,
+		Grammar: g,
 	}
 }
 
-func (p *Pcfg) StartIndex() int {
-	if len(p.grammar.Sections) == 0 {
+func (p *Pcfg) StartIndex() int32 {
+	if len(p.Grammar.Sections) == 0 {
 		return -1
 	}
-	if p.grammar.Sections[len(p.grammar.Sections)-1].Type == "START" {
-		return len(p.grammar.Sections) - 1
+	if p.Grammar.Sections[len(p.Grammar.Sections)-1].Type == "START" {
+		return int32(len(p.Grammar.Sections) - 1)
 	}
-	for i := range p.grammar.Sections {
-		if p.grammar.Sections[i].Type == "START" {
-			return i
+	for i := range p.Grammar.Sections {
+		if p.Grammar.Sections[i].Type == "START" {
+			return int32(i)
 		}
 	}
 	return -1
 }
 
 func (p *Pcfg) ListTerminals(preTerminal *TreeItem) (uint64, string, string) {
-	guessGeneration := NewGuessGeneration(p.grammar, preTerminal)
+	guessGeneration := NewGuessGeneration(p.Grammar, preTerminal)
 	guess := guessGeneration.First()
 	guesses := uint64(0)
 	first := guess
@@ -51,6 +52,19 @@ func (p *Pcfg) ListTerminals(preTerminal *TreeItem) (uint64, string, string) {
 	return guesses, first, last
 }
 
+func (p *Pcfg) ListTerminalsToWriter(preTerminal *TreeItem, w io.Writer) error {
+	guessGeneration := NewGuessGeneration(p.Grammar, preTerminal)
+	guess := guessGeneration.First()
+	buf := bufio.NewWriter(w)
+	for guess != "" {
+		if _, err := fmt.Fprintln(buf, guess); err != nil {
+			return err
+		}
+		guess = guessGeneration.Next()
+	}
+	return buf.Flush()
+}
+
 func PrintChildren(chs []*TreeItem, depth int) {
 	if len(chs) < 1 {
 		return
@@ -62,10 +76,10 @@ func PrintChildren(chs []*TreeItem, depth int) {
 
 }
 func (p *Pcfg) FindProbability(tree *TreeItem) float64 {
-	if len(p.grammar.Sections) <= tree.Index || len(p.grammar.Sections[tree.Index].Replacements) <= tree.Transition {
+	if len(p.Grammar.Sections) <= int(tree.Index) || len(p.Grammar.Sections[tree.Index].Replacements) <= int(tree.Transition) {
 		panic("wrong indexing in find probability")
 	}
-	prob := p.grammar.Sections[tree.Index].Replacements[tree.Transition].Probability
+	prob := p.Grammar.Sections[tree.Index].Replacements[tree.Transition].Probability
 	if len(tree.Childrens) > 0 {
 		for _, children := range tree.Childrens {
 			childProb := p.FindProbability(children)
@@ -77,7 +91,7 @@ func (p *Pcfg) FindProbability(tree *TreeItem) float64 {
 
 func (p *Pcfg) FindIsTerminal(tree *TreeItem) bool {
 	if len(tree.Childrens) == 0 {
-		if !p.grammar.Sections[tree.Index].Replacements[tree.Transition].IsTerminal {
+		if !p.Grammar.Sections[tree.Index].Replacements[tree.Transition].IsTerminal {
 			return false
 		}
 	} else {
@@ -98,9 +112,9 @@ func (p *Pcfg) DeadbeatDad(tree *TreeItem) []*TreeItem {
 
 func (p *Pcfg) DDFindChildren(node, parent *TreeItem, childrenList []*TreeItem) []*TreeItem {
 	if len(node.Childrens) == 0 {
-		numReplacements := len(p.grammar.Sections[node.Index].Replacements)
+		numReplacements := len(p.Grammar.Sections[node.Index].Replacements)
 		// Takes care of the incrementing if there are children for the current node. Aka(1,2,[]) => (1,3,[])
-		if numReplacements > node.Transition+1 {
+		if numReplacements > int(node.Transition)+1 {
 			// Make this a child node
 			node.Transition++
 			// An id to identify the calling node as the parent
@@ -114,9 +128,9 @@ func (p *Pcfg) DDFindChildren(node, parent *TreeItem, childrenList []*TreeItem) 
 			// Replace the parent's value
 			node.Transition--
 		}
-		if !p.grammar.Sections[node.Index].Replacements[0].IsTerminal {
+		if !p.Grammar.Sections[node.Index].Replacements[0].IsTerminal {
 			var newExpansion []*TreeItem
-			for _, pos := range p.grammar.Sections[node.Index].Replacements[node.Transition].Pos {
+			for _, pos := range p.Grammar.Sections[node.Index].Replacements[node.Transition].Pos {
 				newExpansion = append(newExpansion, &TreeItem{
 					Index:      pos,
 					Transition: 0,
@@ -153,8 +167,8 @@ func (p *Pcfg) DDIsMyParent(child *TreeItem, isExpansion bool) bool {
 		curNode, curParseTree = curParseTree[len(curParseTree)-1], curParseTree[:len(curParseTree)-1]
 		if len(curNode.Childrens) == 0 {
 			if curNode.Transition != 0 {
-				parentProbDiff := p.grammar.Sections[curNode.Index].Replacements[curNode.Transition-1].Probability -
-					p.grammar.Sections[curNode.Index].Replacements[curNode.Transition].Probability
+				parentProbDiff := p.Grammar.Sections[curNode.Index].Replacements[curNode.Transition-1].Probability -
+					p.Grammar.Sections[curNode.Index].Replacements[curNode.Transition].Probability
 				if parentProbDiff < minDiff {
 					if curNode.Id && !isExpansion {
 						foundOrigParent = true
@@ -177,7 +191,7 @@ func (p *Pcfg) DDIsMyParent(child *TreeItem, isExpansion bool) bool {
 			if emptyListParent {
 				newExpansionProb := 1.0
 				for _, children := range curNode.Childrens {
-					newExpansionProb *= p.grammar.Sections[children.Index].Replacements[0].Probability
+					newExpansionProb *= p.Grammar.Sections[children.Index].Replacements[0].Probability
 				}
 				parentProbDiff := 1.0 - newExpansionProb
 				if parentProbDiff < minDiff {

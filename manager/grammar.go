@@ -21,11 +21,11 @@ var (
 	rgxPythArr = regexp.MustCompile(`"(.*?)"`)
 )
 
-type GrammarMapping map[string]map[string]int
+type GrammarMapping map[string]map[string]int32
 
 type Grammar struct {
 	cfgFile     *ini.File
-	ruleName    string
+	RuleName    string
 	sectionList []string
 	Sections    []*Section
 	Mapping     GrammarMapping
@@ -41,7 +41,7 @@ type Replacement struct {
 	IsTerminal  bool
 	Values      []string
 	Function    string
-	Pos         []int
+	Pos         []int32
 }
 
 type InputBase struct {
@@ -57,7 +57,7 @@ type Section struct {
 
 func LoadGrammar(ruleName string) (*Grammar, error) {
 	grammar := &Grammar{
-		ruleName: ruleName,
+		RuleName: ruleName,
 	}
 	if err := grammar.Parse(); err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func LoadGrammar(ruleName string) (*Grammar, error) {
 func (g *Grammar) Parse() error {
 	var err error
 	g.sectionList = []string{}
-	g.cfgFile, err = ini.Load(RulesFolder + g.ruleName + "/" + "config.ini")
+	g.cfgFile, err = ini.Load(RulesFolder + g.RuleName + "/" + "config.ini")
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (g *Grammar) Build(section string) error {
 	}
 	return nil
 }
-func (g *Grammar) GetGrammarPos(id, length string) (int, error) {
+func (g *Grammar) GetGrammarPos(id, length string) (int32, error) {
 	if val1, ok := g.Mapping[id]; ok {
 		if val2, ok := val1[length]; ok {
 			return val2, nil
@@ -164,14 +164,14 @@ func (g *Grammar) GetGrammarPos(id, length string) (int, error) {
 		return 0, ErrGrammarMapping
 	}
 }
-func (g *Grammar) ParseBaseStructure(base string) ([]int, error) {
-	var pos []int
+func (g *Grammar) ParseBaseStructure(base string) ([]int32, error) {
+	var pos []int32
 	if base == "M" {
 		val, err := g.GetGrammarPos("M", "markov_prob")
 		if err != nil {
 			return pos, err
 		}
-		return []int{val}, nil
+		return []int32{val}, nil
 	}
 
 	elems := splitBaseToNonTerminals(base)
@@ -250,10 +250,10 @@ func (g *Grammar) FindGrammarMapping(section string) error {
 		return err
 	}
 	for _, replace := range replacements {
-		g.Mapping[replace.TransitionId] = make(map[string]int)
+		g.Mapping[replace.TransitionId] = make(map[string]int32)
 		for i, sec := range g.Sections {
 			if replace.ConfigId == sec.Type {
-				g.Mapping[replace.TransitionId][sec.Name] = i
+				g.Mapping[replace.TransitionId][sec.Name] = int32(i)
 			}
 		}
 	}
@@ -266,7 +266,7 @@ func (g *Grammar) InsertTerminal(section string) error {
 		return err
 	}
 	filenames := fromPythonArray(g.cfgFile.Section(section).Key("filenames").String())
-	directory := RulesFolder + g.ruleName + "/" + g.cfgFile.Section(section).Key("directory").String()
+	directory := RulesFolder + g.RuleName + "/" + g.cfgFile.Section(section).Key("directory").String()
 
 	for _, curFile := range filenames {
 		filePath := directory + "/" + curFile
@@ -278,7 +278,7 @@ func (g *Grammar) InsertTerminal(section string) error {
 			Name: strings.TrimSuffix(curFile, ".txt"),
 			Type: section,
 		}
-		var replacementPos int
+		var replacementPos int32
 		if function == "Capitalization" || function == "Copy" || function == "Shadow" || function == "Markov" {
 			curReplacement := &Replacement{
 				Function:    function,
@@ -297,7 +297,7 @@ func (g *Grammar) InsertTerminal(section string) error {
 					return err
 				}
 				replacementPos = val
-				curReplacement.Pos = []int{replacementPos}
+				curReplacement.Pos = []int32{replacementPos}
 			}
 			lastProb := probabilities[0].Probability
 			for i := 1; i < len(probabilities); i++ {
@@ -315,7 +315,7 @@ func (g *Grammar) InsertTerminal(section string) error {
 					}
 
 					if function == "Shadow" {
-						curReplacement.Pos = []int{replacementPos}
+						curReplacement.Pos = []int32{replacementPos}
 					}
 				} else {
 					return ErrOrderList

@@ -1,13 +1,14 @@
 package manager
 
 import (
+	"github.com/sirupsen/logrus"
 	"sync"
 	"sync/atomic"
 )
 
 type Generator struct {
-	generated  uint64
-	pcfg       *Pcfg
+  generated  uint64
+	Pcfg       *Pcfg
 	pQue       *PcfqQueue
 	goRoutines int
 	args       *InputArgs
@@ -19,14 +20,14 @@ func NewGenerator(pcfg *Pcfg) *Generator {
 		panic(err)
 	}
 	return &Generator{
-		pcfg: pcfg,
+		Pcfg: pcfg,
 		pQue: que,
 	}
 }
 
 func (g *Generator) worker(jobs <-chan *TreeItem) {
 	for j := range jobs {
-		guesses, _, _ := g.pcfg.ListTerminals(j)
+		guesses, _, _ := g.Pcfg.ListTerminals(j)
 		atomic.AddUint64(&g.generated, guesses)
 	}
 
@@ -35,6 +36,35 @@ func (g *Generator) worker(jobs <-chan *TreeItem) {
 func (g *Generator) debugger() {
 
 }
+
+func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
+	var ch chan *TreeItem
+	if args.TerminalsQueSize > 0 {
+		ch = make(chan *TreeItem, args.TerminalsQueSize)
+	} else {
+		ch = make(chan *TreeItem)
+	}
+	go func() {
+		var err error
+		var item *QueueItem
+		for err != ErrPriorirtyQueEmpty {
+			if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
+				break
+			}
+			item, err = g.pQue.Next()
+			if err != nil {
+				if err != ErrPriorirtyQueEmpty {
+					logrus.Warn(err)
+				}
+				break
+			}
+			ch <- item.Tree
+		}
+		close(ch)
+	}()
+	return ch
+}
+
 func (g *Generator) Run(args *InputArgs) error {
 	g.args = args
 
@@ -70,7 +100,7 @@ func (g *Generator) Run(args *InputArgs) error {
 			close(jobs)
 			return err
 		}
-		//guesses, _, _ := g.pcfg.ListTerminals(item.Tree)
+		//guesses, _, _ := g.Pcfg.ListTerminals(item.Tree)
 		//g.generated += guesses
 		jobs <- item.Tree
 	}

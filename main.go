@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/dasio/pcfg-manager/cmd"
-	"log"
+	log "github.com/sirupsen/logrus"
 	//_ "net/http/pprof"
 	"os"
 )
@@ -17,6 +17,6 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()*/
 	if err := cmd.Execute(); err != nil {
-		panic(err)
+		log.Error(err)
 	}
 }
