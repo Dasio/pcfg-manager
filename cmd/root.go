@@ -36,9 +36,9 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVarP(&ruleName, "rule-name", "r", "Default", "specifies rule")
-	rootCmd.LocalFlags().UintVarP(&inputArgs.GoRoutines, "go-routines", "g", 2, "how many go routines will be used")
-	rootCmd.LocalFlags().Uint64VarP(&inputArgs.MaxGuesses, "max-guesses", "m", 0, "max guesses before exit")
-	rootCmd.LocalFlags().BoolVarP(&inputArgs.Debug, "debug", "d", false, "")
+	rootCmd.Flags().UintVarP(&inputArgs.GoRoutines, "go-routines", "g", 2, "how many go routines will be used")
+	rootCmd.Flags().Uint64VarP(&inputArgs.MaxGuesses, "max-guesses", "m", 0, "max guesses before exit")
+	rootCmd.Flags().BoolVarP(&inputArgs.Debug, "debug", "d", false, "")
 }
 
 func initConfig() {

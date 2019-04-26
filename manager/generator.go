@@ -7,10 +7,10 @@ import (
 )
 
 type Generator struct {
+  generated  uint64
 	Pcfg       *Pcfg
 	pQue       *PcfqQueue
 	goRoutines int
-	generated  uint64
 	args       *InputArgs
 }
 
