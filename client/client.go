@@ -119,7 +119,7 @@ func (s *Service) Connect(address string) error {
 }
 
 func (s *Service) startHashcat() (*exec.Cmd, error) {
-	cmd := exec.Command(s.hashcatPath, "-m", s.hashcatMode, "--force", "-O", "-o", "results.txt", "-w", "1", "--machine-readable", "--status", s.hashFile)
+	cmd := exec.Command(s.hashcatPath, "-m", s.hashcatMode, "-o", "results.txt", "--machine-readable", "--status", s.hashFile)
 	//cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	pipe, err := cmd.StdinPipe()

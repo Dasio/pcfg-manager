@@ -17,7 +17,7 @@ func init() {
 	serverCmd.Flags().StringVar(&serverArgs.HashcatMode, "hashcatMode", "0", "hashcat mode of hash")
 	serverCmd.Flags().StringVarP(&serverArgs.Port, "port", "p", "50051", "server port")
 	serverCmd.Flags().Uint64VarP(&serverArgs.MaxGuesses, "maxGuesses", "m", 0, "max guesses before exit")
-	serverCmd.Flags().IntVar(&serverArgs.TerminalsQueSize, "termQueSize", 100000, "how many pre-terminals structure leads to terminals can be in que - 0 for unlimited")
+	serverCmd.Flags().IntVar(&serverArgs.TerminalsQueSize, "termQueSize", 100000, "how many pre-terminals structure leads to terminals can be in que ")
 	serverCmd.Flags().Uint64Var(&serverArgs.ChunkStartSize, "chunkStartSize", 10000, "how many pre-terminals will be sent at connected client")
 	serverCmd.Flags().DurationVar(&serverArgs.ChunkDuration, "chunkDuration", time.Second*30, "how long should each chunk take")
 

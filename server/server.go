@@ -175,7 +175,10 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 		return &pb.TreeItems{}, errors.New("no peer")
 	}
 	then := time.Now()
-	clientInfo := s.clients[p.Addr.String()]
+	clientInfo, ok := s.clients[p.Addr.String()]
+	if !ok {
+		return nil, errors.New("client is not connected")
+	}
 	chunkSize := s.args.ChunkStartSize
 	if !clientInfo.EndTime.IsZero() && clientInfo.PreviousTerminals != 0 {
 		speed := float64(clientInfo.PreviousTerminals) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
@@ -200,7 +203,10 @@ func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.
 	if !ok {
 		return &pb.ResultResponse{End: false}, errors.New("no peer")
 	}
-	clientInfo := s.clients[p.Addr.String()]
+	clientInfo, ok := s.clients[p.Addr.String()]
+	if !ok {
+		return nil, errors.New("client is not connected")
+	}
 	for hash, password := range in.Hashes {
 		delete(s.remainingHashes, hash)
 		s.completedHashes[hash] = password
