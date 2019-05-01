@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -56,12 +57,16 @@ var (
 )
 
 func NewService(inArgs InputArgs) (*Service, error) {
-	path, err := filepath.Abs(inArgs.HashcatFolder + "/" + getHashcatBinary())
-	if err != nil {
-		return nil, err
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, err
+	var path string
+	var err error
+	if !inArgs.GenOnly {
+		path, err = filepath.Abs(inArgs.HashcatFolder + "/" + getHashcatBinary())
+		if err != nil {
+			return nil, err
+		}
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return nil, err
+		}
 	}
 	svc := &Service{
 		hashcatPath: path,
@@ -179,14 +184,34 @@ func (s *Service) Run(done <-chan bool) error {
 		}
 	}
 }
-func (s *Service) generateOnly(preTerminals []*pb.TreeItem) (map[string]string, error) {
-	for _, item := range preTerminals {
-		treeItem := pb.TreeItemFromProto(item)
+
+func (s *Service) worker(jobs <-chan *pb.TreeItem) {
+	for j := range jobs {
+		treeItem := pb.TreeItemFromProto(j)
 		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, os.Stdout)
 		if err != nil {
-			return nil, err
+			logrus.Warn(err)
 		}
 	}
+
+}
+func (s *Service) generateOnly(preTerminals []*pb.TreeItem) (map[string]string, error) {
+	const goRoutines = 4
+
+	jobs := make(chan *pb.TreeItem, goRoutines)
+	wg := sync.WaitGroup{}
+	wg.Add(goRoutines)
+	for w := uint(1); w <= goRoutines; w++ {
+		go func() {
+			s.worker(jobs)
+			wg.Done()
+		}()
+	}
+	for _, item := range preTerminals {
+		jobs <- item
+	}
+	close(jobs)
+	wg.Wait()
 	return map[string]string{}, nil
 }
 func (s *Service) startCracking(preTerminals []*pb.TreeItem) (map[string]string, error) {
