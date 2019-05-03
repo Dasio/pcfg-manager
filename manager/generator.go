@@ -37,18 +37,23 @@ func (g *Generator) debugger() {
 
 }
 
-func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
-	var ch chan *TreeItem
+type PreTerminalItem struct {
+	Item  *TreeItem
+	Count uint64
+}
+
+func (g *Generator) RunForServer(args *InputArgs) <-chan PreTerminalItem {
+	var ch chan PreTerminalItem
 	if args.TerminalsQueSize > 0 {
-		ch = make(chan *TreeItem, args.TerminalsQueSize)
+		ch = make(chan PreTerminalItem, args.TerminalsQueSize)
 	} else {
-		ch = make(chan *TreeItem)
+		ch = make(chan PreTerminalItem)
 	}
 	go func() {
 		var err error
 		var item *QueueItem
 		for err != ErrPriorirtyQueEmpty {
-			if args.MaxGuesses > 0 && g.Generated >= args.MaxGuesses {
+			if args.MaxGuesses > 0 && atomic.LoadUint64(&g.Generated) >= args.MaxGuesses {
 				break
 			}
 			item, err = g.pQue.Next()
@@ -58,7 +63,10 @@ func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
 				}
 				break
 			}
-			ch <- item.Tree
+			guessGeneration := NewGuessGeneration(g.Pcfg.Grammar, item.Tree)
+			count := guessGeneration.Count()
+			atomic.AddUint64(&g.Generated, count)
+			ch <- PreTerminalItem{Item: item.Tree, Count: count}
 		}
 		close(ch)
 	}()

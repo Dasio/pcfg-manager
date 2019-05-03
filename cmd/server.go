@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"fmt"
 	"github.com/dasio/pcfg-manager/manager"
 	"github.com/dasio/pcfg-manager/server"
 	"github.com/spf13/cobra"
@@ -31,6 +32,7 @@ var serverCmd = &cobra.Command{
 	Short: "run server",
 	Long:  "run server",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		startTime := time.Now()
 		svc := server.NewService()
 		serverArgs.RuleName = ruleName
 		if err := svc.Load(serverArgs); err != nil {
@@ -42,6 +44,10 @@ var serverCmd = &cobra.Command{
 				svc.DebugClients()
 			}
 		}()
-		return svc.Run()
+		if err := svc.Run(); err != nil {
+			return err
+		}
+		fmt.Println("ended in ", time.Now().Sub(startTime))
+		return nil
 	},
 }

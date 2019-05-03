@@ -19,15 +19,17 @@ import (
 )
 
 type Service struct {
-	mng             *manager.Manager
-	args            manager.InputArgs
-	remainingHashes map[string]struct{}
-	completedHashes map[string]string
-	generatorCh     <-chan *manager.TreeItem
-	returnedChunks  *list.List
-	clients         map[string]ClientInfo
-	chunkId         uint32
-	endCracking     chan bool
+	mng                *manager.Manager
+	args               manager.InputArgs
+	remainingHashes    map[string]struct{}
+	completedHashes    map[string]string
+	generatorCh        <-chan manager.PreTerminalItem
+	returnedChunks     *list.List
+	clients            map[string]ClientInfo
+	chunkId            uint32
+	endCracking        chan bool
+	processedTerminals uint64
+	timeGeneration     time.Duration
 }
 
 type Chunk struct {
@@ -35,6 +37,7 @@ type Chunk struct {
 	PreTerminals   []*pb.TreeItem
 	Terminals      []string
 	TerminalsCount uint64
+	TimeGeneration time.Duration
 }
 
 func NewService() *Service {
@@ -61,7 +64,8 @@ func (s *Service) DebugClients() {
 		fmt.Printf("[%s] chunk: %d total: %d, speed: %f\n",
 			client.Addr, client.ActualChunk.Id, client.Total, client.Speed)
 	}
-	fmt.Printf("Generated: %d, totalSpeed: %f\n", s.mng.Generator.Generated, totalSpeed)
+	fmt.Printf("Generated: %d, processed: %d, totalSpeed: %f, generationTime: %s\n",
+		s.mng.Generator.Generated, s.processedTerminals, totalSpeed, s.timeGeneration)
 }
 func (s *Service) Load(args manager.InputArgs) error {
 	s.args = args
@@ -147,11 +151,6 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	return &pb.Empty{}, nil
 }
 
-type chunkItem struct {
-	item  *manager.TreeItem
-	count uint64
-}
-
 func (s *Service) GetNextChunk(size uint64) (Chunk, bool) {
 	total := uint64(0)
 	endGen := false
@@ -163,20 +162,18 @@ func (s *Service) GetNextChunk(size uint64) (Chunk, bool) {
 			return *chunk, false
 		}
 	}
-	var chunkItems []chunkItem
+	startTime := time.Now()
+	var chunkItems []manager.PreTerminalItem
 loop:
 	for total < size {
 		select {
 		case it := <-s.generatorCh:
-			if it == nil {
+			if it.Item == nil {
 				endGen = true
 				break loop
 			}
-			//chunkItems = append(chunkItems, pb.TreeItemToProto(it))
-			guessGeneration := manager.NewGuessGeneration(s.mng.Generator.Pcfg.Grammar, it)
-			count := guessGeneration.Count()
-			total += count
-			chunkItems = append(chunkItems, chunkItem{item: it, count: count})
+			total += it.Count
+			chunkItems = append(chunkItems, it)
 		case <-time.After(time.Second * 2):
 			break loop
 		}
@@ -186,19 +183,22 @@ loop:
 	if !s.args.GenerateTerminals {
 		preTerminals = make([]*pb.TreeItem, 0, len(chunkItems))
 		for _, ch := range chunkItems {
-			preTerminals = append(preTerminals, pb.TreeItemToProto(ch.item))
+			preTerminals = append(preTerminals, pb.TreeItemToProto(ch.Item))
 		}
 	} else {
 		guesses = make([]string, 0, total)
 		for _, ch := range chunkItems {
-			guesses = append(guesses, s.mng.Generator.Pcfg.ListTerminalsToSlice(ch.item, ch.count)...)
+			guesses = append(guesses, s.mng.Generator.Pcfg.ListTerminalsToSlice(ch.Item, ch.Count)...)
 		}
 	}
+	timeGen := time.Now().Sub(startTime)
+	s.timeGeneration += timeGen
 	return Chunk{
 		Id:             atomic.AddUint32(&s.chunkId, 1),
 		PreTerminals:   preTerminals,
 		Terminals:      guesses,
 		TerminalsCount: total,
+		TimeGeneration: timeGen,
 	}, endGen
 }
 
@@ -218,7 +218,7 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.Items, e
 		chunkSize = uint64(clientInfo.Speed * s.args.ChunkDuration.Seconds())
 	}
 	chunk, endGen := s.GetNextChunk(chunkSize)
-	if endGen && len(chunk.PreTerminals) == 0 {
+	if endGen && chunk.TerminalsCount == 0 {
 		return &pb.Items{}, nil
 	}
 	clientInfo.ActualChunk = chunk
@@ -248,14 +248,14 @@ func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.
 		s.completedHashes[hash] = password
 	}
 	clientInfo.EndTime = time.Now()
-	atomic.AddUint64(&s.mng.Generator.Generated, clientInfo.ActualChunk.TerminalsCount)
+	s.processedTerminals += clientInfo.ActualChunk.TerminalsCount
 	clientInfo.Total += clientInfo.ActualChunk.TerminalsCount
 	clientInfo.PreviousTerminals = clientInfo.ActualChunk.TerminalsCount
 	clientInfo.ActualChunk = Chunk{}
 	s.clients[p.Addr.String()] = clientInfo
 
 	logrus.Infof("result from %s: %d in %f seconds", clientInfo.Addr, len(in.Hashes), clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds())
-	if len(s.remainingHashes) == 0 {
+	if len(s.remainingHashes) == 0 || s.processedTerminals >= s.mng.Generator.Generated {
 		s.endCracking <- true
 		return &pb.ResultResponse{End: true}, nil
 	}
