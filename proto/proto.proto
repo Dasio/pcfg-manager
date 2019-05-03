@@ -6,7 +6,7 @@ package proto;
 service PCFG {
   rpc Connect (Empty) returns (ConnectResponse) {}
   rpc Disconnect(Empty) returns (Empty);
-  rpc GetNextItems(Empty) returns (TreeItems) {}
+  rpc GetNextItems(Empty) returns (Items) {}
   rpc SendResult(CrackingResponse) returns (ResultResponse);
 }
 
@@ -51,8 +51,10 @@ message Section {
   repeated Replacement replacements = 3;
 }
 
-message TreeItems {
-  repeated TreeItem items = 1;
+message Items {
+  repeated TreeItem preTerminals = 1;
+  repeated string terminals = 2;
+
 }
 message TreeItem {
   int32 index = 1;

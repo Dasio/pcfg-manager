@@ -32,7 +32,8 @@ type Service struct {
 
 type Chunk struct {
 	Id             uint32
-	Items          []*pb.TreeItem
+	PreTerminals   []*pb.TreeItem
+	Terminals      []string
 	TerminalsCount uint64
 }
 
@@ -49,8 +50,19 @@ type ClientInfo struct {
 	StartTime         time.Time
 	EndTime           time.Time
 	PreviousTerminals uint64
+	Total             uint64
+	Speed             float64
 }
 
+func (s *Service) DebugClients() {
+	totalSpeed := 0.0
+	for _, client := range s.clients {
+		totalSpeed += client.Speed
+		fmt.Printf("[%s] chunk: %d total: %d, speed: %f\n",
+			client.Addr, client.ActualChunk.Id, client.Total, client.Speed)
+	}
+	fmt.Printf("Generated: %d, totalSpeed: %f\n", s.mng.Generator.Generated, totalSpeed)
+}
 func (s *Service) Load(args manager.InputArgs) error {
 	s.args = args
 	lines, err := readLines(s.args.HashFile)
@@ -126,13 +138,18 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 	}
 	if clientInfo.ActualChunk.Id != 0 {
 		logrus.Infof("client %s did not finished chunk[%d], sending %d preterminals back to channel",
-			clientInfo.Addr, clientInfo.ActualChunk.Id, len(clientInfo.ActualChunk.Items))
+			clientInfo.Addr, clientInfo.ActualChunk.Id, len(clientInfo.ActualChunk.PreTerminals))
 		s.returnedChunks.PushBack(&clientInfo.ActualChunk)
 	}
 	delete(s.clients, p.Addr.String())
 	logrus.Infof("client %s disconnected", p.Addr.String())
 
 	return &pb.Empty{}, nil
+}
+
+type chunkItem struct {
+	item  *manager.TreeItem
+	count uint64
 }
 
 func (s *Service) GetNextChunk(size uint64) (Chunk, bool) {
@@ -146,7 +163,7 @@ func (s *Service) GetNextChunk(size uint64) (Chunk, bool) {
 			return *chunk, false
 		}
 	}
-	var chunkItems []*pb.TreeItem
+	var chunkItems []chunkItem
 loop:
 	for total < size {
 		select {
@@ -155,24 +172,40 @@ loop:
 				endGen = true
 				break loop
 			}
-			chunkItems = append(chunkItems, pb.TreeItemToProto(it))
+			//chunkItems = append(chunkItems, pb.TreeItemToProto(it))
 			guessGeneration := manager.NewGuessGeneration(s.mng.Generator.Pcfg.Grammar, it)
-			total += guessGeneration.Count()
+			count := guessGeneration.Count()
+			total += count
+			chunkItems = append(chunkItems, chunkItem{item: it, count: count})
 		case <-time.After(time.Second * 2):
 			break loop
 		}
 	}
+	var preTerminals []*pb.TreeItem
+	var guesses []string
+	if !s.args.GenerateTerminals {
+		preTerminals = make([]*pb.TreeItem, 0, len(chunkItems))
+		for _, ch := range chunkItems {
+			preTerminals = append(preTerminals, pb.TreeItemToProto(ch.item))
+		}
+	} else {
+		guesses = make([]string, 0, total)
+		for _, ch := range chunkItems {
+			guesses = append(guesses, s.mng.Generator.Pcfg.ListTerminalsToSlice(ch.item, ch.count)...)
+		}
+	}
 	return Chunk{
 		Id:             atomic.AddUint32(&s.chunkId, 1),
-		Items:          chunkItems,
+		PreTerminals:   preTerminals,
+		Terminals:      guesses,
 		TerminalsCount: total,
 	}, endGen
 }
 
-func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItems, error) {
+func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.Items, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return &pb.TreeItems{}, errors.New("no peer")
+		return &pb.Items{}, errors.New("no peer")
 	}
 	then := time.Now()
 	clientInfo, ok := s.clients[p.Addr.String()]
@@ -181,21 +214,24 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.TreeItem
 	}
 	chunkSize := s.args.ChunkStartSize
 	if !clientInfo.EndTime.IsZero() && clientInfo.PreviousTerminals != 0 {
-		speed := float64(clientInfo.PreviousTerminals) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
-		chunkSize = uint64(speed * s.args.ChunkDuration.Seconds())
+		clientInfo.Speed = float64(clientInfo.PreviousTerminals) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
+		chunkSize = uint64(clientInfo.Speed * s.args.ChunkDuration.Seconds())
 	}
 	chunk, endGen := s.GetNextChunk(chunkSize)
-	if endGen && len(chunk.Items) == 0 {
-		return &pb.TreeItems{}, nil
+	if endGen && len(chunk.PreTerminals) == 0 {
+		return &pb.Items{}, nil
 	}
 	clientInfo.ActualChunk = chunk
 	clientInfo.StartTime = time.Now()
 	s.clients[p.Addr.String()] = clientInfo
-	logrus.Infof("sending chunk[%d], preTerminals: %d, terminals: %d to %s in %s",
-		chunk.Id, len(chunk.Items), chunk.TerminalsCount, clientInfo.Addr, time.Now().Sub(then).String())
-	return &pb.TreeItems{
-		Items: chunk.Items,
-	}, nil
+	items := &pb.Items{
+		PreTerminals: chunk.PreTerminals,
+		Terminals:    chunk.Terminals,
+	}
+	logrus.Infof("sending chunk[%d], preTerminals: %d, terminals: %d to %s in %s, size: %d",
+		chunk.Id, len(chunk.PreTerminals), chunk.TerminalsCount, clientInfo.Addr, time.Now().Sub(then).String(), items.XXX_Size())
+
+	return items, nil
 }
 
 func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.ResultResponse, error) {
@@ -212,6 +248,8 @@ func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.
 		s.completedHashes[hash] = password
 	}
 	clientInfo.EndTime = time.Now()
+	atomic.AddUint64(&s.mng.Generator.Generated, clientInfo.ActualChunk.TerminalsCount)
+	clientInfo.Total += clientInfo.ActualChunk.TerminalsCount
 	clientInfo.PreviousTerminals = clientInfo.ActualChunk.TerminalsCount
 	clientInfo.ActualChunk = Chunk{}
 	s.clients[p.Addr.String()] = clientInfo

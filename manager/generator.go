@@ -7,7 +7,7 @@ import (
 )
 
 type Generator struct {
-	generated  uint64
+	Generated  uint64
 	Pcfg       *Pcfg
 	pQue       *PcfqQueue
 	goRoutines int
@@ -28,7 +28,7 @@ func NewGenerator(pcfg *Pcfg) *Generator {
 func (g *Generator) worker(jobs <-chan *TreeItem) {
 	for j := range jobs {
 		guesses, _, _ := g.Pcfg.ListTerminals(j)
-		atomic.AddUint64(&g.generated, guesses)
+		atomic.AddUint64(&g.Generated, guesses)
 	}
 
 }
@@ -48,7 +48,7 @@ func (g *Generator) RunForServer(args *InputArgs) <-chan *TreeItem {
 		var err error
 		var item *QueueItem
 		for err != ErrPriorirtyQueEmpty {
-			if args.MaxGuesses > 0 && g.generated >= args.MaxGuesses {
+			if args.MaxGuesses > 0 && g.Generated >= args.MaxGuesses {
 				break
 			}
 			item, err = g.pQue.Next()
@@ -89,7 +89,7 @@ func (g *Generator) Run(args *InputArgs) error {
 	}
 
 	for err != ErrPriorirtyQueEmpty {
-		if args.MaxGuesses > 0 && atomic.LoadUint64(&g.generated) >= args.MaxGuesses {
+		if args.MaxGuesses > 0 && atomic.LoadUint64(&g.Generated) >= args.MaxGuesses {
 			break
 		}
 		item, err = g.pQue.Next()
@@ -101,7 +101,7 @@ func (g *Generator) Run(args *InputArgs) error {
 			return err
 		}
 		//guesses, _, _ := g.Pcfg.ListTerminals(item.Tree)
-		//g.generated += guesses
+		//g.Generated += guesses
 		jobs <- item.Tree
 	}
 	close(jobs)

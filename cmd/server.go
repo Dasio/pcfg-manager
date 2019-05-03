@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"github.com/dasio/pcfg-manager/manager"
 	"github.com/dasio/pcfg-manager/server"
 	"github.com/spf13/cobra"
+	"os"
 	"time"
 )
 
@@ -20,6 +22,7 @@ func init() {
 	serverCmd.Flags().IntVar(&serverArgs.TerminalsQueSize, "termQueSize", 100000, "how many pre-terminals structure leads to terminals can be in que ")
 	serverCmd.Flags().Uint64Var(&serverArgs.ChunkStartSize, "chunkStartSize", 10000, "how many pre-terminals will be sent at connected client")
 	serverCmd.Flags().DurationVar(&serverArgs.ChunkDuration, "chunkDuration", time.Second*30, "how long should each chunk take")
+	serverCmd.Flags().BoolVar(&serverArgs.GenerateTerminals, "generateTerminals", false, "server will generate terminals from preterminals structure and send them")
 
 }
 
@@ -33,6 +36,12 @@ var serverCmd = &cobra.Command{
 		if err := svc.Load(serverArgs); err != nil {
 			return err
 		}
+		go func() {
+			for {
+				_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
+				svc.DebugClients()
+			}
+		}()
 		return svc.Run()
 	},
 }

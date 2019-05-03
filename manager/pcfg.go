@@ -65,6 +65,20 @@ func (p *Pcfg) ListTerminalsToWriter(preTerminal *TreeItem, w io.Writer) error {
 	return buf.Flush()
 }
 
+func (p *Pcfg) ListTerminalsToSlice(preTerminal *TreeItem, capacity uint64) []string {
+	guessGeneration := NewGuessGeneration(p.Grammar, preTerminal)
+	guess := guessGeneration.First()
+	var guesses []string
+	if capacity > 0 {
+		guesses = make([]string, 0, capacity)
+	}
+	for guess != "" {
+		guesses = append(guesses, guess)
+		guess = guessGeneration.Next()
+	}
+	return guesses
+}
+
 func PrintChildren(chs []*TreeItem, depth int) {
 	if len(chs) < 1 {
 		return

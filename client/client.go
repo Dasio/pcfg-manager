@@ -151,9 +151,9 @@ func (s *Service) Run(done <-chan bool) error {
 				_, _ = s.c.SendResult(ctx, &pb.CrackingResponse{})
 				return err
 			}
-			logrus.Infof("received %d preTerminals", len(res.Items))
+			logrus.Infof("received %d preTerminals and %d terminals", len(res.PreTerminals), len(res.Terminals))
 			cancel()
-			if len(res.Items) == 0 {
+			if len(res.PreTerminals) == 0 && len(res.Terminals) == 0 {
 				_, err = s.c.SendResult(context.Background(), &pb.CrackingResponse{})
 				if err != nil {
 					return err
@@ -162,9 +162,9 @@ func (s *Service) Run(done <-chan bool) error {
 			}
 			var results map[string]string
 			if s.genOnly {
-				results, err = s.generateOnly(res.Items)
+				results, err = s.generateOnly(res)
 			} else {
-				results, err = s.startCracking(res.Items)
+				results, err = s.startCracking(res)
 			}
 			if err != nil {
 				return err
@@ -195,7 +195,7 @@ func (s *Service) worker(jobs <-chan *pb.TreeItem) {
 	}
 
 }
-func (s *Service) generateOnly(preTerminals []*pb.TreeItem) (map[string]string, error) {
+func (s *Service) generateOnly(items *pb.Items) (map[string]string, error) {
 	const goRoutines = 4
 
 	jobs := make(chan *pb.TreeItem, goRoutines)
@@ -207,25 +207,44 @@ func (s *Service) generateOnly(preTerminals []*pb.TreeItem) (map[string]string, 
 			wg.Done()
 		}()
 	}
-	for _, item := range preTerminals {
+	for _, item := range items.PreTerminals {
 		jobs <- item
 	}
 	close(jobs)
 	wg.Wait()
+	buf := bufio.NewWriter(os.Stdout)
+	for _, t := range items.Terminals {
+		if _, err := fmt.Fprintln(buf, t); err != nil {
+			return nil, err
+		}
+	}
+	if err := buf.Flush(); err != nil {
+		return nil, err
+	}
 	return map[string]string{}, nil
 }
-func (s *Service) startCracking(preTerminals []*pb.TreeItem) (map[string]string, error) {
+func (s *Service) startCracking(items *pb.Items) (map[string]string, error) {
 	cmd, err := s.startHashcat()
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range preTerminals {
+	for _, item := range items.PreTerminals {
 		treeItem := pb.TreeItemFromProto(item)
 		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, s.hashcatPipe)
 		if err != nil {
 			return nil, err
 		}
 	}
+	buf := bufio.NewWriter(s.hashcatPipe)
+	for _, t := range items.Terminals {
+		if _, err := fmt.Fprintln(buf, t); err != nil {
+			return nil, err
+		}
+	}
+	if err := buf.Flush(); err != nil {
+		return nil, err
+	}
+
 	if err := s.hashcatPipe.Close(); err != nil {
 		return nil, err
 	}
