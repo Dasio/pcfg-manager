@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"io"
 	"io/ioutil"
+	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -125,7 +126,7 @@ func (s *Service) Connect(address string) error {
 
 func (s *Service) startHashcat() (*exec.Cmd, error) {
 	cmd := exec.Command(s.hashcatPath, "-m", s.hashcatMode, "-o", "results.txt", "--machine-readable", "--status", s.hashFile)
-	//cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	pipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -197,7 +198,7 @@ func (s *Service) worker(jobs <-chan *pb.TreeItem) {
 }
 func (s *Service) generateOnly(items *pb.Items) (map[string]string, error) {
 	const goRoutines = 4
-
+	then := time.Now()
 	jobs := make(chan *pb.TreeItem, goRoutines)
 	wg := sync.WaitGroup{}
 	wg.Add(goRoutines)
@@ -221,6 +222,8 @@ func (s *Service) generateOnly(items *pb.Items) (map[string]string, error) {
 	if err := buf.Flush(); err != nil {
 		return nil, err
 	}
+	log.Println("generation took ", time.Now().Sub(then))
+
 	return map[string]string{}, nil
 }
 func (s *Service) startCracking(items *pb.Items) (map[string]string, error) {
@@ -228,6 +231,7 @@ func (s *Service) startCracking(items *pb.Items) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	then := time.Now()
 	for _, item := range items.PreTerminals {
 		treeItem := pb.TreeItemFromProto(item)
 		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, s.hashcatPipe)
@@ -244,6 +248,7 @@ func (s *Service) startCracking(items *pb.Items) (map[string]string, error) {
 	if err := buf.Flush(); err != nil {
 		return nil, err
 	}
+	fmt.Println("generation took ", time.Now().Sub(then))
 
 	if err := s.hashcatPipe.Close(); err != nil {
 		return nil, err

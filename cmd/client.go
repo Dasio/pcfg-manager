@@ -16,8 +16,8 @@ var (
 func init() {
 	rootCmd.AddCommand(clientCmd)
 	clientCmd.Flags().StringVarP(&clientArgs.ServerAddress, "server", "s", "localhost:50051", "server address")
-	clientCmd.Flags().StringVar(&clientArgs.HashcatFolder, "hashcatFolder", "./hashcat", "folder in which is hashcat binary")
-	clientCmd.Flags().BoolVar(&clientArgs.GenOnly, "generateOnly", false, "generation guesses without cracking")
+	clientCmd.Flags().StringVar(&clientArgs.HashcatFolder, "hashcat-folder", "./hashcat", "folder in which is hashcat binary")
+	clientCmd.Flags().BoolVar(&clientArgs.GenOnly, "generate-only", false, "generation guesses without cracking")
 
 }
 
