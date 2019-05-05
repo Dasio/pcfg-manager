@@ -30,6 +30,8 @@ type Service struct {
 	endCracking        chan bool
 	processedTerminals uint64
 	timeGeneration     time.Duration
+	bandwidth          uint64
+	start              time.Time
 }
 
 type Chunk struct {
@@ -66,6 +68,36 @@ func (s *Service) DebugClients() {
 	}
 	fmt.Printf("Generated: %d, processed: %d, totalSpeed: %f, generationTime: %s\n",
 		s.mng.Generator.Generated, s.processedTerminals, totalSpeed, s.timeGeneration)
+}
+
+func (s *Service) SaveStats() error {
+	f, err := os.Create("stats-server-" + time.Now().Format(time.RFC3339) + ".txt")
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Time: %s\n", time.Now().Sub(s.start)))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Bandwidth: %d\n", s.bandwidth))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Terminals: %d\n", s.processedTerminals))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Clients: %d\n", len(s.clients)))
+	if err != nil {
+		return err
+	}
+	for _, client := range s.clients {
+		_, err = f.WriteString(fmt.Sprintf("\t [%s] total: %d, speed: %f\n", client.Addr, client.Total, client.Speed))
+		if err != nil {
+			return err
+		}
+	}
+	return f.Close()
 }
 func (s *Service) Load(args manager.InputArgs) error {
 	s.args = args
@@ -123,6 +155,9 @@ func (s *Service) Connect(ctx context.Context, req *pb.Empty) (*pb.ConnectRespon
 	for k := range s.remainingHashes {
 		hashList = append(hashList, k)
 	}
+	if s.start.IsZero() {
+		s.start = time.Now()
+	}
 	logrus.Infof("client %s connected", client.Addr)
 	return &pb.ConnectResponse{
 		Grammar:     pb.GrammarToProto(s.mng.Generator.Pcfg.Grammar),
@@ -145,7 +180,7 @@ func (s *Service) Disconnect(ctx context.Context, req *pb.Empty) (*pb.Empty, err
 			clientInfo.Addr, clientInfo.ActualChunk.Id, len(clientInfo.ActualChunk.PreTerminals))
 		s.returnedChunks.PushBack(&clientInfo.ActualChunk)
 	}
-	delete(s.clients, p.Addr.String())
+	//delete(s.clients, p.Addr.String())
 	logrus.Infof("client %s disconnected", p.Addr.String())
 
 	return &pb.Empty{}, nil
@@ -225,11 +260,14 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.Items, e
 	clientInfo.StartTime = time.Now()
 	s.clients[p.Addr.String()] = clientInfo
 	items := &pb.Items{
-		PreTerminals: chunk.PreTerminals,
-		Terminals:    chunk.Terminals,
+		PreTerminals:   chunk.PreTerminals,
+		Terminals:      chunk.Terminals,
+		TerminalsCount: chunk.TerminalsCount,
 	}
+	msgSize := items.XXX_Size()
+	s.bandwidth += uint64(msgSize)
 	logrus.Infof("sending chunk[%d], preTerminals: %d, terminals: %d to %s in %s, size: %d",
-		chunk.Id, len(chunk.PreTerminals), chunk.TerminalsCount, clientInfo.Addr, time.Now().Sub(then).String(), items.XXX_Size())
+		chunk.Id, len(chunk.PreTerminals), chunk.TerminalsCount, clientInfo.Addr, time.Now().Sub(then).String(), msgSize)
 
 	return items, nil
 }

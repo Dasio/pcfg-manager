@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc"
 	"io"
 	"io/ioutil"
-	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -34,13 +33,19 @@ type Service struct {
 	hashcatMode string
 	hashcatPipe io.WriteCloser
 	// tmp
-	hashes []string
+	hashes         []string
+	start          time.Time
+	bandwidth      uint64
+	terminalsCount uint64
+	genRoutines    uint
 }
 
 type InputArgs struct {
 	ServerAddress string
 	HashcatFolder string
 	GenOnly       bool
+	GenRoutines   uint
+	SaveStats     bool
 }
 
 const (
@@ -72,10 +77,36 @@ func NewService(inArgs InputArgs) (*Service, error) {
 	svc := &Service{
 		hashcatPath: path,
 		genOnly:     inArgs.GenOnly,
+		genRoutines: inArgs.GenRoutines,
 	}
 	return svc, nil
 }
 
+func (s *Service) SaveStats() error {
+	finish := time.Now()
+	f, err := os.Create(fmt.Sprintf("stats-client[%s]-%s.txt", s.grpcConn.Target(), time.Now().Format(time.RFC3339)))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Time: %s\n", finish.Sub(s.start)))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Bandwidth: %d\n", s.bandwidth))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Terminals: %d\n", s.terminalsCount))
+	if err != nil {
+		return err
+	}
+	speed := float64(s.terminalsCount) / float64(finish.Second())
+	_, err = f.WriteString(fmt.Sprintf("Speed: %f\n", speed))
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
 func getHashcatBinary() string {
 	var ext string
 	if runtime.GOOS == "windows" {
@@ -120,6 +151,7 @@ func (s *Service) Connect(address string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
+	s.start = time.Now()
 
 	return nil
 }
@@ -170,6 +202,9 @@ func (s *Service) Run(done <-chan bool) error {
 			if err != nil {
 				return err
 			}
+			s.terminalsCount += res.TerminalsCount
+			s.bandwidth += uint64(res.XXX_Size())
+
 			resultRes, err := s.c.SendResult(context.Background(), &pb.CrackingResponse{
 				Hashes: results,
 			})
@@ -197,12 +232,10 @@ func (s *Service) worker(jobs <-chan *pb.TreeItem) {
 
 }
 func (s *Service) generateOnly(items *pb.Items) (map[string]string, error) {
-	const goRoutines = 4
-	then := time.Now()
-	jobs := make(chan *pb.TreeItem, goRoutines)
+	jobs := make(chan *pb.TreeItem, s.genRoutines)
 	wg := sync.WaitGroup{}
-	wg.Add(goRoutines)
-	for w := uint(1); w <= goRoutines; w++ {
+	wg.Add(int(s.genRoutines))
+	for w := 1; w <= int(s.genRoutines); w++ {
 		go func() {
 			s.worker(jobs)
 			wg.Done()
@@ -222,7 +255,6 @@ func (s *Service) generateOnly(items *pb.Items) (map[string]string, error) {
 	if err := buf.Flush(); err != nil {
 		return nil, err
 	}
-	log.Println("generation took ", time.Now().Sub(then))
 
 	return map[string]string{}, nil
 }
@@ -308,5 +340,8 @@ func (s *Service) Disconnect() error {
 		return err
 	}
 	_ = os.Remove(s.hashFile)
-	return s.grpcConn.Close()
+	if err := s.grpcConn.Close(); err != nil {
+		return err
+	}
+	return nil
 }

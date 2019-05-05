@@ -54,6 +54,7 @@ message Section {
 message Items {
   repeated TreeItem preTerminals = 1;
   repeated string terminals = 2;
+  uint64 terminalsCount = 3;
 
 }
 message TreeItem {

@@ -14,4 +14,5 @@ type InputArgs struct {
 	ChunkStartSize    uint64
 	ChunkDuration     time.Duration
 	GenerateTerminals bool
+	SaveStats         bool
 }

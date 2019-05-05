@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"fmt"
 	"github.com/dasio/pcfg-manager/manager"
 	"github.com/dasio/pcfg-manager/server"
 	"github.com/spf13/cobra"
@@ -24,6 +23,7 @@ func init() {
 	serverCmd.Flags().Uint64Var(&serverArgs.ChunkStartSize, "chunk-start-size", 10000, "how many pre-terminals will be sent at connected client")
 	serverCmd.Flags().DurationVar(&serverArgs.ChunkDuration, "chunk-duration", time.Second*30, "how long should each chunk take")
 	serverCmd.Flags().BoolVar(&serverArgs.GenerateTerminals, "generate-terminals", false, "server will generate terminals from preterminals structure and send them")
+	serverCmd.Flags().BoolVar(&serverArgs.SaveStats, "stats", false, "save stats after end")
 
 }
 
@@ -32,7 +32,6 @@ var serverCmd = &cobra.Command{
 	Short: "run server",
 	Long:  "run server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		startTime := time.Now()
 		svc := server.NewService()
 		serverArgs.RuleName = ruleName
 		if err := svc.Load(serverArgs); err != nil {
@@ -47,7 +46,11 @@ var serverCmd = &cobra.Command{
 		if err := svc.Run(); err != nil {
 			return err
 		}
-		fmt.Println("ended in ", time.Now().Sub(startTime))
+		if serverArgs.SaveStats {
+			if err := svc.SaveStats(); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
 }

@@ -113,9 +113,7 @@ func (q *PcfqQueue) AddChildrenToQueue(item *QueueItem) {
 			Probability: q.pcfg.FindProbability(child),
 			Tree:        child,
 		}
-
 		if childNode.Probability <= item.Probability {
-			// @TODO backup storag
 			heap.Push(&q.pQue, childNode)
 		} else {
 			log.Warnf("trying to push a parent and not a child on the list")
