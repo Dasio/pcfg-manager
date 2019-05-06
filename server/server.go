@@ -87,6 +87,10 @@ func (s *Service) SaveStats() error {
 	if err != nil {
 		return err
 	}
+	_, err = f.WriteString(fmt.Sprintf("Timegen: %s\n", s.timeGeneration))
+	if err != nil {
+		return err
+	}
 	_, err = f.WriteString(fmt.Sprintf("Clients: %d\n", len(s.clients)))
 	if err != nil {
 		return err
