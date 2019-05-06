@@ -33,11 +33,13 @@ type Service struct {
 	hashcatMode string
 	hashcatPipe io.WriteCloser
 	// tmp
-	hashes         []string
-	start          time.Time
-	bandwidth      uint64
-	terminalsCount uint64
-	genRoutines    uint
+	hashes          []string
+	start           time.Time
+	bandwidth       uint64
+	terminalsCount  uint64
+	genRoutines     uint
+	waitForResponse time.Duration
+	genTime         time.Duration
 }
 
 type InputArgs struct {
@@ -102,6 +104,14 @@ func (s *Service) SaveStats() error {
 	}
 	speed := float64(s.terminalsCount) / float64(finish.Second())
 	_, err = f.WriteString(fmt.Sprintf("Speed: %f\n", speed))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Waiting for responses: %s\n", s.waitForResponse))
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(fmt.Sprintf("Generation/Cracking time %s\n", s.genTime))
 	if err != nil {
 		return err
 	}
@@ -178,12 +188,14 @@ func (s *Service) Run(done <-chan bool) error {
 			return nil
 		default:
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+			then := time.Now()
 			res, err := s.c.GetNextItems(ctx, &pb.Empty{}, grpc.MaxCallRecvMsgSize(math.MaxInt32))
 			if err != nil {
 				cancel()
 				_, _ = s.c.SendResult(ctx, &pb.CrackingResponse{})
 				return err
 			}
+			s.waitForResponse += time.Now().Sub(then)
 			logrus.Infof("received %d preTerminals and %d terminals", len(res.PreTerminals), len(res.Terminals))
 			cancel()
 			if len(res.PreTerminals) == 0 && len(res.Terminals) == 0 {
@@ -194,6 +206,7 @@ func (s *Service) Run(done <-chan bool) error {
 				return nil
 			}
 			var results map[string]string
+			then = time.Now()
 			if s.genOnly {
 				results, err = s.generateOnly(res)
 			} else {
@@ -204,6 +217,7 @@ func (s *Service) Run(done <-chan bool) error {
 			}
 			s.terminalsCount += res.TerminalsCount
 			s.bandwidth += uint64(res.XXX_Size())
+			s.genTime += time.Now().Sub(then)
 
 			resultRes, err := s.c.SendResult(context.Background(), &pb.CrackingResponse{
 				Hashes: results,
@@ -263,7 +277,6 @@ func (s *Service) startCracking(items *pb.Items) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	then := time.Now()
 	for _, item := range items.PreTerminals {
 		treeItem := pb.TreeItemFromProto(item)
 		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, s.hashcatPipe)
@@ -280,7 +293,6 @@ func (s *Service) startCracking(items *pb.Items) (map[string]string, error) {
 	if err := buf.Flush(); err != nil {
 		return nil, err
 	}
-	fmt.Println("generation took ", time.Now().Sub(then))
 
 	if err := s.hashcatPipe.Close(); err != nil {
 		return nil, err
