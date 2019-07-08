@@ -140,7 +140,7 @@ func (s *Service) Connect(address string) error {
 	s.c = pb.NewPCFGClient(s.grpcConn)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	r, err := s.c.Connect(ctx, &pb.Empty{})
+	r, err := s.c.Connect(ctx, &pb.Empty{}, grpc.MaxCallRecvMsgSize(math.MaxInt32))
 	if err != nil {
 		return err
 	}
