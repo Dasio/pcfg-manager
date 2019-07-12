@@ -6,13 +6,16 @@ package proto;
 service PCFG {
   rpc Connect (Empty) returns (ConnectResponse) {}
   rpc Disconnect(Empty) returns (Empty);
-  rpc GetNextItems(Empty) returns (Items) {}
+  rpc GetNextItems(NextRequest) returns (Items) {}
   rpc SendResult(CrackingResponse) returns (ResultResponse);
 }
 
 message Empty {
 }
 
+message NextRequest {
+  uint64 terminals = 1;
+}
 message ConnectResponse {
   Grammar grammar = 1;
   repeated string hashList = 2;

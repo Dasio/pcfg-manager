@@ -1,6 +1,10 @@
 package manager
 
-import log "github.com/sirupsen/logrus"
+import (
+	pb "github.com/dasio/pcfg-manager/proto"
+	"github.com/golang/protobuf/proto"
+	"io/ioutil"
+)
 
 type Manager struct {
 	Generator *Generator
@@ -23,15 +27,30 @@ func (m *Manager) Load() error {
 	return nil
 }
 
+func (m *Manager) LoadFromFile(file string) error {
+	b, err := ioutil.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	var pbGrammar pb.Grammar
+	if err := proto.Unmarshal(b, &pbGrammar); err != nil {
+		return err
+	}
+	grammar := GrammarFromProto(&pbGrammar)
+	pcfg := NewPcfg(grammar)
+	m.Generator = NewGenerator(pcfg)
+	return nil
+}
+
 func (m *Manager) LoadWithGrammar(g *Grammar) {
 	m.Generator = NewGenerator(NewPcfg(g))
 }
 
 func (m *Manager) Start(input *InputArgs) error {
-	log.Infoln("Rule: ", m.ruleName)
-	log.Infoln("GoRoutines: ", input.GoRoutines)
-	log.Infoln("MaxGuesses: ", input.MaxGuesses)
-	log.Infoln("Debug: ", input.Debug)
+	//log.Infoln("Rule: ", m.ruleName)
+	//log.Infoln("GoRoutines: ", input.GoRoutines)
+	//log.Infoln("MaxGuesses: ", input.MaxGuesses)
+	//log.Infoln("Debug: ", input.Debug)
 
 	if err := m.Generator.Run(input); err != nil {
 		return err

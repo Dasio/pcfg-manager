@@ -164,7 +164,7 @@ func (s *Service) Connect(ctx context.Context, req *pb.Empty) (*pb.ConnectRespon
 	}
 	logrus.Infof("client %s connected", client.Addr)
 	return &pb.ConnectResponse{
-		Grammar:     pb.GrammarToProto(s.mng.Generator.Pcfg.Grammar),
+		Grammar:     manager.GrammarToProto(s.mng.Generator.Pcfg.Grammar),
 		HashList:    hashList,
 		HashcatMode: s.args.HashcatMode,
 	}, nil
@@ -222,7 +222,7 @@ loop:
 	if !s.args.GenerateTerminals {
 		preTerminals = make([]*pb.TreeItem, 0, len(chunkItems))
 		for _, ch := range chunkItems {
-			preTerminals = append(preTerminals, pb.TreeItemToProto(ch.Item))
+			preTerminals = append(preTerminals, manager.TreeItemToProto(ch.Item))
 		}
 	} else {
 		guesses = make([]string, 0, total)
@@ -241,7 +241,7 @@ loop:
 	}, endGen
 }
 
-func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.Items, error) {
+func (s *Service) GetNextItems(ctx context.Context, req *pb.NextRequest) (*pb.Items, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return &pb.Items{}, errors.New("no peer")
@@ -252,9 +252,13 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.Empty) (*pb.Items, e
 		return nil, errors.New("client is not connected")
 	}
 	chunkSize := s.args.ChunkStartSize
-	if !clientInfo.EndTime.IsZero() && clientInfo.PreviousTerminals != 0 {
-		clientInfo.Speed = float64(clientInfo.PreviousTerminals) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
-		chunkSize = uint64(clientInfo.Speed * s.args.ChunkDuration.Seconds())
+	if req.Terminals != 0 {
+		chunkSize = req.Terminals
+	} else {
+		if !clientInfo.EndTime.IsZero() && clientInfo.PreviousTerminals != 0 {
+			clientInfo.Speed = float64(clientInfo.PreviousTerminals) / clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds()
+			chunkSize = uint64(clientInfo.Speed * s.args.ChunkDuration.Seconds())
+		}
 	}
 	chunk, endGen := s.GetNextChunk(chunkSize)
 	if endGen && chunk.TerminalsCount == 0 {

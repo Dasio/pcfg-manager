@@ -144,7 +144,7 @@ func (s *Service) Connect(address string) error {
 	if err != nil {
 		return err
 	}
-	s.grammar = pb.GrammarFromProto(r.Grammar)
+	s.grammar = manager.GrammarFromProto(r.Grammar)
 	s.mng = manager.NewManager(s.grammar.RuleName)
 	s.mng.LoadWithGrammar(s.grammar)
 	f, err := ioutil.TempFile("", "pcfg-*.hash")
@@ -189,7 +189,7 @@ func (s *Service) Run(done <-chan bool) error {
 		default:
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 			then := time.Now()
-			res, err := s.c.GetNextItems(ctx, &pb.Empty{}, grpc.MaxCallRecvMsgSize(math.MaxInt32))
+			res, err := s.c.GetNextItems(ctx, &pb.NextRequest{}, grpc.MaxCallRecvMsgSize(math.MaxInt32))
 			if err != nil {
 				cancel()
 				_, _ = s.c.SendResult(ctx, &pb.CrackingResponse{})
@@ -237,7 +237,7 @@ func (s *Service) Run(done <-chan bool) error {
 
 func (s *Service) worker(jobs <-chan *pb.TreeItem) {
 	for j := range jobs {
-		treeItem := pb.TreeItemFromProto(j)
+		treeItem := manager.TreeItemFromProto(j)
 		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, os.Stdout)
 		if err != nil {
 			logrus.Warn(err)
@@ -278,7 +278,7 @@ func (s *Service) startCracking(items *pb.Items) (map[string]string, error) {
 		return nil, err
 	}
 	for _, item := range items.PreTerminals {
-		treeItem := pb.TreeItemFromProto(item)
+		treeItem := manager.TreeItemFromProto(item)
 		err := s.mng.Generator.Pcfg.ListTerminalsToWriter(treeItem, s.hashcatPipe)
 		if err != nil {
 			return nil, err

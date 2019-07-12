@@ -1,30 +1,48 @@
-package proto
+package manager
 
-import "github.com/dasio/pcfg-manager/manager"
+import (
+	"github.com/dasio/pcfg-manager/proto"
+)
 
-func GrammarToProto(g *manager.Grammar) *Grammar {
-	return &Grammar{
+func GrammarToProto(g *Grammar) *proto.Grammar {
+	return &proto.Grammar{
 		RuleName: g.RuleName,
 		Sections: sectionsToProto(g.Sections),
 		Mapping:  mappingToProto(g.Mapping),
 	}
 }
 
-func GrammarFromProto(g *Grammar) *manager.Grammar {
-	return &manager.Grammar{
+func GrammarFromProto(g *proto.Grammar) *Grammar {
+	return &Grammar{
 		RuleName: g.RuleName,
 		Sections: sectionsFromProto(g.Sections),
 		Mapping:  mappingFromProto(g.Mapping),
 	}
 }
 
-func TreeItemToProto(i *manager.TreeItem) *TreeItem {
+func TreeItemToProto(i *TreeItem) *proto.TreeItem {
+	if i == nil {
+		return nil
+	}
+	childrens := make([]*proto.TreeItem, 0, len(i.Childrens))
+	for _, ch := range i.Childrens {
+		childrens = append(childrens, TreeItemToProto(ch))
+	}
+	return &proto.TreeItem{
+		Index:      i.Index,
+		Transition: i.Transition,
+		Id:         i.Id,
+		Childrens:  childrens,
+	}
+}
+
+func TreeItemFromProto(i *proto.TreeItem) *TreeItem {
 	if i == nil {
 		return nil
 	}
 	childrens := make([]*TreeItem, 0, len(i.Childrens))
 	for _, ch := range i.Childrens {
-		childrens = append(childrens, TreeItemToProto(ch))
+		childrens = append(childrens, TreeItemFromProto(ch))
 	}
 	return &TreeItem{
 		Index:      i.Index,
@@ -33,34 +51,18 @@ func TreeItemToProto(i *manager.TreeItem) *TreeItem {
 		Childrens:  childrens,
 	}
 }
-
-func TreeItemFromProto(i *TreeItem) *manager.TreeItem {
-	if i == nil {
-		return nil
-	}
-	childrens := make([]*manager.TreeItem, 0, len(i.Childrens))
-	for _, ch := range i.Childrens {
-		childrens = append(childrens, TreeItemFromProto(ch))
-	}
-	return &manager.TreeItem{
-		Index:      i.Index,
-		Transition: i.Transition,
-		Id:         i.Id,
-		Childrens:  childrens,
-	}
-}
-func mappingToProto(m manager.GrammarMapping) map[string]*IntMap {
-	res := make(map[string]*IntMap)
+func mappingToProto(m GrammarMapping) map[string]*proto.IntMap {
+	res := make(map[string]*proto.IntMap)
 	for k, v := range m {
-		res[k] = &IntMap{
+		res[k] = &proto.IntMap{
 			Value: v,
 		}
 	}
 	return res
 }
 
-func mappingFromProto(m map[string]*IntMap) manager.GrammarMapping {
-	res := make(manager.GrammarMapping)
+func mappingFromProto(m map[string]*proto.IntMap) GrammarMapping {
+	res := make(GrammarMapping)
 	for k, v := range m {
 		if v != nil {
 			res[k] = v.Value
@@ -69,38 +71,48 @@ func mappingFromProto(m map[string]*IntMap) manager.GrammarMapping {
 	return res
 }
 
-func sectionToProto(s *manager.Section) *Section {
-	return &Section{
+func sectionToProto(s *Section) *proto.Section {
+	return &proto.Section{
 		Type:         s.Type,
 		Name:         s.Name,
 		Replacements: replacementsToProto(s.Replacements),
 	}
 }
 
-func sectionFromProto(s *Section) *manager.Section {
-	return &manager.Section{
+func sectionFromProto(s *proto.Section) *Section {
+	return &Section{
 		Type:         s.Type,
 		Name:         s.Name,
 		Replacements: replacementsFromProto(s.Replacements),
 	}
 }
 
-func sectionsFromProto(s []*Section) []*manager.Section {
-	res := make([]*manager.Section, 0, len(s))
+func sectionsFromProto(s []*proto.Section) []*Section {
+	res := make([]*Section, 0, len(s))
 	for _, val := range s {
 		res = append(res, sectionFromProto(val))
 	}
 	return res
 }
 
-func sectionsToProto(s []*manager.Section) []*Section {
-	res := make([]*Section, 0, len(s))
+func sectionsToProto(s []*Section) []*proto.Section {
+	res := make([]*proto.Section, 0, len(s))
 	for _, val := range s {
 		res = append(res, sectionToProto(val))
 	}
 	return res
 }
-func replacementToProto(r *manager.Replacement) *Replacement {
+func replacementToProto(r *Replacement) *proto.Replacement {
+	return &proto.Replacement{
+		Probability: r.Probability,
+		IsTerminal:  r.IsTerminal,
+		Values:      r.Values,
+		Function:    r.Function,
+		Pos:         r.Pos,
+	}
+}
+
+func replacementFromProto(r *proto.Replacement) *Replacement {
 	return &Replacement{
 		Probability: r.Probability,
 		IsTerminal:  r.IsTerminal,
@@ -110,26 +122,16 @@ func replacementToProto(r *manager.Replacement) *Replacement {
 	}
 }
 
-func replacementFromProto(r *Replacement) *manager.Replacement {
-	return &manager.Replacement{
-		Probability: r.Probability,
-		IsTerminal:  r.IsTerminal,
-		Values:      r.Values,
-		Function:    r.Function,
-		Pos:         r.Pos,
-	}
-}
-
-func replacementsToProto(r []*manager.Replacement) []*Replacement {
-	res := make([]*Replacement, 0, len(r))
+func replacementsToProto(r []*Replacement) []*proto.Replacement {
+	res := make([]*proto.Replacement, 0, len(r))
 	for _, val := range r {
 		res = append(res, replacementToProto(val))
 	}
 	return res
 }
 
-func replacementsFromProto(r []*Replacement) []*manager.Replacement {
-	res := make([]*manager.Replacement, 0, len(r))
+func replacementsFromProto(r []*proto.Replacement) []*Replacement {
+	res := make([]*Replacement, 0, len(r))
 	for _, val := range r {
 		res = append(res, replacementFromProto(val))
 	}
