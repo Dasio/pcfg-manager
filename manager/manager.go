@@ -46,6 +46,21 @@ func (m *Manager) LoadWithGrammar(g *Grammar) {
 	m.Generator = NewGenerator(NewPcfg(g))
 }
 
+func (m *Manager) ListTerminals(preTerminalsFile string) error {
+	b, err := ioutil.ReadFile(preTerminalsFile)
+	if err != nil {
+		return err
+	}
+	var pbItems pb.Items
+	if err := proto.Unmarshal(b, &pbItems); err != nil {
+		return err
+	}
+	for _, item := range pbItems.PreTerminals {
+		treeItem := TreeItemFromProto(item)
+		m.Generator.Pcfg.ListTerminals(treeItem)
+	}
+	return nil
+}
 func (m *Manager) Start(input *InputArgs) error {
 	//log.Infoln("Rule: ", m.ruleName)
 	//log.Infoln("GoRoutines: ", input.GoRoutines)

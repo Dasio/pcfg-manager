@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"github.com/dasio/pcfg-manager/manager"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/cobra"
@@ -31,7 +30,6 @@ var marshalCmd = &cobra.Command{
 			return err
 		}
 		err = ioutil.WriteFile(outFile, b, 0644)
-		b, err = json.Marshal(g)
 		return err
 	},
 }

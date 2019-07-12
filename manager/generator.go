@@ -95,7 +95,6 @@ func (g *Generator) Run(args *InputArgs) error {
 			wg.Done()
 		}()
 	}
-
 	for err != ErrPriorirtyQueEmpty {
 		if args.MaxGuesses > 0 && atomic.LoadUint64(&g.Generated) >= args.MaxGuesses {
 			break
