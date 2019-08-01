@@ -145,7 +145,7 @@ func (s *Service) Connect(address string) error {
 		return err
 	}
 	s.grammar = manager.GrammarFromProto(r.Grammar)
-	s.mng = manager.NewManager(s.grammar.RuleName)
+	s.mng = manager.NewManager(s.grammar.RulesFolder)
 	s.mng.LoadWithGrammar(s.grammar)
 	f, err := ioutil.TempFile("", "pcfg-*.hash")
 	if err != nil {

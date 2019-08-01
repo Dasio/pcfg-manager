@@ -20,7 +20,7 @@ var marshalCmd = &cobra.Command{
 	Use:   "marshal",
 	Short: "used for marshalling grammar",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		g, err := manager.LoadGrammar(ruleName)
+		g, err := manager.LoadGrammar(rulesFolder)
 		if err != nil {
 			return err
 		}

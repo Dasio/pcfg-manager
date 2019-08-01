@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	ruleName         string
+	rulesFolder      string
 	grammarFile      string
 	preTerminalsFile string
 	inputArgs        manager.InputArgs
@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 	Short: "Password generator",
 	Long:  `Password generator`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		mng := manager.NewManager(ruleName)
+		mng := manager.NewManager(rulesFolder)
 		if grammarFile != "" {
 			if err := mng.LoadFromFile(grammarFile); err != nil {
 				return err
@@ -46,7 +46,7 @@ func Execute() error {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVarP(&ruleName, "rule-name", "r", "Default", "specifies rule")
+	rootCmd.PersistentFlags().StringVarP(&rulesFolder, "rules", "r", "Rules/Default", "specifies rule")
 	rootCmd.Flags().StringVarP(&grammarFile, "grammar-file", "", "", "it uses marshaled grammar file instead of parsing")
 	rootCmd.Flags().StringVarP(&preTerminalsFile, "preterminals-file", "", "", "generates terminals from specified preterminals")
 

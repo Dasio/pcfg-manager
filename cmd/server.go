@@ -33,7 +33,7 @@ var serverCmd = &cobra.Command{
 	Long:  "run server",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		svc := server.NewService()
-		serverArgs.RuleName = ruleName
+		serverArgs.RulesFolder = rulesFolder
 		if err := svc.Load(serverArgs); err != nil {
 			return err
 		}

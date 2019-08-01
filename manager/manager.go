@@ -7,18 +7,18 @@ import (
 )
 
 type Manager struct {
-	Generator *Generator
-	ruleName  string
+	Generator   *Generator
+	rulesFolder string
 }
 
-func NewManager(ruleName string) *Manager {
+func NewManager(rulesFolder string) *Manager {
 	return &Manager{
-		ruleName: ruleName,
+		rulesFolder: rulesFolder,
 	}
 }
 
 func (m *Manager) Load() error {
-	grammar, err := LoadGrammar(m.ruleName)
+	grammar, err := LoadGrammar(m.rulesFolder)
 	if err != nil {
 		return err
 	}

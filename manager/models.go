@@ -7,7 +7,7 @@ type InputArgs struct {
 	MaxGuesses        uint64
 	Debug             bool
 	Port              string
-	RuleName          string
+	RulesFolder       string
 	HashFile          string
 	HashcatMode       string
 	TerminalsQueSize  int

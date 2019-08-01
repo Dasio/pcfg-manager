@@ -25,7 +25,7 @@ type GrammarMapping map[string]map[string]int32
 
 type Grammar struct {
 	cfgFile     *ini.File
-	RuleName    string
+	RulesFolder string
 	sectionList []string
 	Sections    []*Section
 	Mapping     GrammarMapping
@@ -55,9 +55,9 @@ type Section struct {
 	Replacements []*Replacement
 }
 
-func LoadGrammar(ruleName string) (*Grammar, error) {
+func LoadGrammar(rulesFolder string) (*Grammar, error) {
 	grammar := &Grammar{
-		RuleName: ruleName,
+		RulesFolder: rulesFolder,
 	}
 	if err := grammar.Parse(); err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func LoadGrammar(ruleName string) (*Grammar, error) {
 func (g *Grammar) Parse() error {
 	var err error
 	g.sectionList = []string{}
-	g.cfgFile, err = ini.Load(RulesFolder + g.RuleName + "/" + "config.ini")
+	g.cfgFile, err = ini.Load(g.RulesFolder + "/" + "config.ini")
 	if err != nil {
 		return err
 	}
@@ -266,7 +266,7 @@ func (g *Grammar) InsertTerminal(section string) error {
 		return err
 	}
 	filenames := fromPythonArray(g.cfgFile.Section(section).Key("filenames").String())
-	directory := RulesFolder + g.RuleName + "/" + g.cfgFile.Section(section).Key("directory").String()
+	directory := g.RulesFolder + "/" + g.cfgFile.Section(section).Key("directory").String()
 
 	for _, curFile := range filenames {
 		filePath := directory + "/" + curFile

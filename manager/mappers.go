@@ -6,17 +6,17 @@ import (
 
 func GrammarToProto(g *Grammar) *proto.Grammar {
 	return &proto.Grammar{
-		RuleName: g.RuleName,
-		Sections: sectionsToProto(g.Sections),
-		Mapping:  mappingToProto(g.Mapping),
+		RulesFolder: g.RulesFolder,
+		Sections:    sectionsToProto(g.Sections),
+		Mapping:     mappingToProto(g.Mapping),
 	}
 }
 
 func GrammarFromProto(g *proto.Grammar) *Grammar {
 	return &Grammar{
-		RuleName: g.RuleName,
-		Sections: sectionsFromProto(g.Sections),
-		Mapping:  mappingFromProto(g.Mapping),
+		RulesFolder: g.RulesFolder,
+		Sections:    sectionsFromProto(g.Sections),
+		Mapping:     mappingFromProto(g.Mapping),
 	}
 }
 

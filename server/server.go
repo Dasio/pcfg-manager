@@ -105,20 +105,24 @@ func (s *Service) SaveStats() error {
 }
 func (s *Service) Load(args manager.InputArgs) error {
 	s.args = args
-	lines, err := readLines(s.args.HashFile)
-	if err != nil {
-		return err
+	if s.args.HashFile != "" {
+		lines, err := readLines(s.args.HashFile)
+		if err != nil {
+			return err
+		}
+		for _, l := range lines {
+			if len(l) > 0 && !unicode.IsSpace(rune(l[0])) {
+				s.remainingHashes[l] = struct{}{}
+			}
+		}
 	}
+
 	s.remainingHashes = make(map[string]struct{})
 	s.completedHashes = make(map[string]string)
 	s.endCracking = make(chan bool)
 	s.returnedChunks = list.New()
-	for _, l := range lines {
-		if len(l) > 0 && !unicode.IsSpace(rune(l[0])) {
-			s.remainingHashes[l] = struct{}{}
-		}
-	}
-	s.mng = manager.NewManager(s.args.RuleName)
+
+	s.mng = manager.NewManager(s.args.RulesFolder)
 	if err := s.mng.Load(); err != nil {
 		return err
 	}

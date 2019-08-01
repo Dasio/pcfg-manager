@@ -15,7 +15,7 @@ var countCmd = &cobra.Command{
 	Short: "Count how many terminals can be generated from grammar - may be wrong - not tested",
 	Long:  "Count how many terminals can be generated from grammar - may be wrong - not tested",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		g, err := manager.LoadGrammar(ruleName)
+		g, err := manager.LoadGrammar(rulesFolder)
 		if err != nil {
 			return err
 		}
