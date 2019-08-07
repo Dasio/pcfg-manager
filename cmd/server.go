@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"bufio"
 	"github.com/dasio/pcfg-manager/manager"
 	"github.com/dasio/pcfg-manager/server"
 	"github.com/spf13/cobra"
-	"os"
 	"time"
 )
 
