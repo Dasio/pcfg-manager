@@ -304,7 +304,7 @@ func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.
 	s.clients[p.Addr.String()] = clientInfo
 
 	logrus.Infof("result from %s: %d in %f seconds", clientInfo.Addr, len(in.Hashes), clientInfo.EndTime.Sub(clientInfo.StartTime).Seconds())
-	if len(s.remainingHashes) == 0 || s.processedTerminals >= s.mng.Generator.Generated {
+	if (len(s.remainingHashes) == 0 && s.args.HashFile != "") || s.processedTerminals >= s.mng.Generator.Generated {
 		s.endCracking <- true
 		return &pb.ResultResponse{End: true}, nil
 	}
