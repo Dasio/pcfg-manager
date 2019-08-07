@@ -105,6 +105,10 @@ func (s *Service) SaveStats() error {
 }
 func (s *Service) Load(args manager.InputArgs) error {
 	s.args = args
+	s.remainingHashes = make(map[string]struct{})
+	s.completedHashes = make(map[string]string)
+	s.endCracking = make(chan bool)
+	s.returnedChunks = list.New()
 	if s.args.HashFile != "" {
 		lines, err := readLines(s.args.HashFile)
 		if err != nil {
@@ -116,11 +120,6 @@ func (s *Service) Load(args manager.InputArgs) error {
 			}
 		}
 	}
-
-	s.remainingHashes = make(map[string]struct{})
-	s.completedHashes = make(map[string]string)
-	s.endCracking = make(chan bool)
-	s.returnedChunks = list.New()
 
 	s.mng = manager.NewManager(s.args.RulesFolder)
 	if err := s.mng.Load(); err != nil {
