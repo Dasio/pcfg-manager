@@ -37,12 +37,12 @@ var serverCmd = &cobra.Command{
 		if err := svc.Load(serverArgs); err != nil {
 			return err
 		}
-		go func() {
+		/*go func() {
 			for {
 				_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
 				svc.DebugClients()
 			}
-		}()
+		}()*/
 		if err := svc.Run(); err != nil {
 			return err
 		}
