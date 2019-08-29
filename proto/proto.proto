@@ -8,6 +8,7 @@ service PCFG {
   rpc Disconnect(Empty) returns (Empty);
   rpc GetNextItems(NextRequest) returns (Items) {}
   rpc SendResult(CrackingResponse) returns (ResultResponse);
+  rpc Kill(Empty) returns (Empty) {}
 }
 
 message Empty {

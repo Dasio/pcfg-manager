@@ -32,6 +32,7 @@ type Service struct {
 	timeGeneration     time.Duration
 	bandwidth          uint64
 	start              time.Time
+	forceStop          bool
 }
 
 type Chunk struct {
@@ -138,7 +139,11 @@ func (s *Service) Run() error {
 	logrus.Infof("Listening on port %s", s.args.Port)
 	go func() {
 		<-s.endCracking
-		server.GracefulStop()
+		if s.forceStop {
+			server.Stop()
+		} else {
+			server.GracefulStop()
+		}
 	}()
 	if err := server.Serve(lis); err != nil {
 		return err
@@ -281,6 +286,12 @@ func (s *Service) GetNextItems(ctx context.Context, req *pb.NextRequest) (*pb.It
 		chunk.Id, len(chunk.PreTerminals), chunk.TerminalsCount, clientInfo.Addr, time.Now().Sub(then).String(), msgSize)
 
 	return items, nil
+}
+
+func (s *Service) Kill(ctx context.Context, req *pb.Empty) (*pb.Empty, error) {
+	s.forceStop = true
+	s.endCracking <- true
+	return &pb.Empty{}, nil
 }
 
 func (s *Service) SendResult(ctx context.Context, in *pb.CrackingResponse) (*pb.ResultResponse, error) {
